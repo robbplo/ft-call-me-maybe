@@ -1,5 +1,5 @@
 run: 
-	uv run src/main.go
+	uv run main.py
 
 test:
 	uv run pytest
