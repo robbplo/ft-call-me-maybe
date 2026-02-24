@@ -49,7 +49,9 @@ AI can assist with many tasks during your learning journey. Always approach AI t
 
 ### III.1 What is Function Calling?
 
-LLMs are powerful at understanding and generating human language, but they don't naturally produce structured, machine-executable output. Function calling bridges this gap by translating natural language requests into precise function calls with typed arguments.
+LLMs are powerful at understanding and generating human language, but they don't naturally produce
+structured, machine-executable output. Function calling bridges this gap by translating natural
+language requests into precise function calls with typed arguments.
 
 **Example:**
 
@@ -59,7 +61,8 @@ LLMs are powerful at understanding and generating human language, but they don't
 | Traditional LLM | "The sum of 40 and 2 is 42." |
 | Function Calling System | `{"function": "add_numbers", "arguments": {"a": 40, "b": 2}}` |
 
-The function calling system provides the tools to solve it — the right function name and the correct arguments with proper types — rather than answering directly.
+The function calling system provides the tools to solve it — the right function name and the correct
+arguments with proper types — rather than answering directly.
 
 ### III.2 Why is This Important?
 
@@ -74,9 +77,12 @@ This technology powers modern AI assistants, code generation tools, and autonomo
 
 ### III.3 The Challenge
 
-Small language models (like the 0.6B parameter model used here) are notoriously unreliable at generating structured output — they might produce valid JSON only 30% of the time from prompting alone. Yet production systems achieve 99%+ reliability with these same small models.
+Small language models (like the 0.6B parameter model used here) are notoriously unreliable at
+generating structured output — they might produce valid JSON only 30% of the time from prompting
+alone. Yet production systems achieve 99%+ reliability with these same small models.
 
-**How?** The answer is **constrained decoding** — a technique that guides the model's output token-by-token to guarantee valid structure, without relying on prompting alone.
+**How?** The answer is **constrained decoding** — a technique that guides the model's output
+token-by-token to guarantee valid structure, without relying on prompting alone.
 
 ---
 

@@ -74,12 +74,12 @@ class Small_LLM_Model:
     # Private helpers
     # -------------------------------------------------------------------------
 
-    def _encode(self, text: str) -> torch.Tensor:
+    def encode(self, text: str) -> torch.Tensor:
         """Tokenise *text* and return a 2-D ``input_ids`` tensor on the target device."""
         ids = self._tokenizer.encode(text, add_special_tokens=False)
         return torch.tensor([ids], device=self._device, dtype=torch.long)
 
-    def _decode(self, ids: torch.Tensor | list[int]) -> str:
+    def decode(self, ids: torch.Tensor | list[int]) -> str:
         """Inverse of :py:meth:`encode`.  Removes special tokens."""
         if isinstance(ids, torch.Tensor):
             ids = ids.tolist()
