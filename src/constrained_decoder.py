@@ -86,6 +86,7 @@ class ConstrainedDecoder:
                     case char if char in DIGITS: return S.IN_NUMBER
                     case char if char in WHITESPACE: return S.EXPECT_COMMA_OR_END
                     case ',': return S.EXPECT_KEY
+                    case '}': return S.END
                     case _: return S.INVALID
             case S.END :
                 return S.INVALID
