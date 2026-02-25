@@ -1,5 +1,5 @@
 from src.state import State, JsonState
-import copy
+from copy import deepcopy
 from typing import Protocol
 
 import torch
@@ -22,7 +22,7 @@ class ConstrainedDecoder:
     def get_logit_mask(self, state: State) -> list[float]:
         mask = [-float('inf')] * self.vocab.size
         for token_id, token_str in enumerate(self.token_bytes):
-            next_state = self.simulate(copy.deepcopy(state), token_str)
+            next_state = self.simulate(deepcopy(state), token_str)
             if next_state.s is not JsonState.INVALID:
                 mask[token_id] = 0.0
         return mask
@@ -39,7 +39,6 @@ class ConstrainedDecoder:
             case JsonState.START:
                 match char:
                     case '{': state.s = JsonState.EXPECT_KEY
-                    case char if char in WHITESPACE: state.s = JsonState.START
                     case _: state.s = JsonState.INVALID
             case JsonState.EXPECT_KEY:
                 match char:

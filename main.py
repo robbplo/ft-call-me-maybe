@@ -29,23 +29,23 @@ def main():
     print(prompt)
 
     result = ""
-    state = State(JsonState.START, ["hello"])
+    state = State(JsonState.START, allowed_keys=["hello"])
     for _ in range(10):
         ids = model.encode(prompt + result)
         logits = model.get_logits_from_input_ids(ids.tolist()[0])
         mask = decoder.get_logit_mask(state)
         masked_logits = [a + b for a, b in zip(logits, mask)]
 
-        print(mask[:100])
-        print([vocabulary[i] for i, logit in enumerate(mask[:100]) if logit >= 0])
         max_index = masked_logits.index(max(masked_logits))
-        # if masked_logits[max_index] < 0:
-        #     raise ValueError("No masked logit greater than 0")
+        # print([vocabulary[i] for i, l in enumerate(masked_logits) if l != float('-inf')])
         token = model.decode([max_index])
         result += token
+        # print(state, token)
         state = decoder.simulate(state, token)
+        if state.s == JsonState.END:
+            break
         assert state.s != JsonState.INVALID
-        print(state)
+        print(token)
     print(result)
 
     # token = decoder.token_bytes[max_index]

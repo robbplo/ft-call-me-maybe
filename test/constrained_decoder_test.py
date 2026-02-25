@@ -28,10 +28,10 @@ decoder = ConstrainedDecoder(model, vocab)
         (JsonState.START, 'a', JsonState.INVALID),
         (JsonState.START, ' b', JsonState.INVALID),
         (JsonState.START, 'c ', JsonState.INVALID),
-        (JsonState.START, '       ', JsonState.START),
+        (JsonState.START, '       ', JsonState.INVALID),
         (JsonState.START, '}', JsonState.INVALID),
         (JsonState.START, '{', JsonState.EXPECT_KEY),
-        (JsonState.START, ' {', JsonState.EXPECT_KEY),
+        (JsonState.START, ' {', JsonState.INVALID),
         # Expect key
         (JsonState.EXPECT_KEY, 'a', JsonState.INVALID),
         (JsonState.EXPECT_KEY, ' b', JsonState.INVALID),
@@ -89,6 +89,8 @@ def test_simulate_json_keys():
     assert state.s == JsonState.IN_KEY
     state = decoder.simulate(state, 'key1"')
     assert state.s == JsonState.EXPECT_COLON
+    state = decoder.simulate(state, ':')
+    assert state.s == JsonState.EXPECT_VALUE
 
 tokens = ["a", "b", "c", "{", "}", '"', ":", ","]
 token_map = {t: i for i, t in enumerate(tokens)}
