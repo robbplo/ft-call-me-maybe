@@ -8,6 +8,15 @@ def load_token_map(vocab_path) -> dict[str, int]:
         vocab = json.load(f)
     return vocab
 
+def apply_mask(logits: list[float], mask: list[float]) -> list[float]:
+    # mask_len = len(mask)
+    for i in range(len(logits)):
+        print("before:", i, logits[i], mask[i])
+        logits[i] += mask[i]
+        print("after:", i, logits[i])
+
+    return logits
+
 def main():
     model = Small_LLM_Model()
 
@@ -16,16 +25,25 @@ def main():
     vocabulary = Vocabulary(token_map)
     decoder = ConstrainedDecoder(model, vocabulary)
 
-    ids = model.encode("generate a json with key 'hello' and value 'world'. JSON:")
+    prompt = "generate a json with key 'hello' and value 'world'. JSON:"
+    print(prompt)
 
-    logits = model.get_logits_from_input_ids(ids.tolist()[0])
-    mask = decoder.get_logit_mask(S.START)
-    masked_logits = [a * b for a, b in zip(logits, mask)]
+    result = ""
+    state = S.START
+    for _ in range(10):
+        ids = model.encode(prompt + result)
+        logits = model.get_logits_from_input_ids(ids.tolist()[0])
+        mask = decoder.get_logit_mask(state)
+        masked_logits = [a + b for a, b in zip(logits, mask)]
 
+        max_index = masked_logits.index(max(masked_logits))
+        # if masked_logits[max_index] < 0:
+        #     raise ValueError("No masked logit greater than 0")
+        token = model.decode([max_index])
+        result += token
+        state = decoder.simulate(state, token)
+    print(result)
 
-    print(len([a for a in masked_logits if a > 0]))
-    max_index = masked_logits.index(max(masked_logits))
-    print("max token", max_index)
     # token = decoder.token_bytes[max_index]
     # print(token)
 

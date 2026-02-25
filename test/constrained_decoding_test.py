@@ -42,6 +42,7 @@ decoder = ConstrainedDecoder(model, vocab)
         (S.IN_KEY, 'a', S.IN_KEY),
         (S.IN_KEY, ' b', S.IN_KEY),
         (S.IN_KEY, 'c ', S.IN_KEY),
+        (S.IN_KEY, ':', S.IN_KEY),
         (S.IN_KEY, '"', S.EXPECT_COLON),
         # Expect colon
         (S.EXPECT_COLON, 'a', S.INVALID),
@@ -83,3 +84,24 @@ decoder = ConstrainedDecoder(model, vocab)
 )
 def test_simulate_json(start_state, input_text, expected_state):
     assert decoder.simulate(start_state, input_text) == expected_state
+
+tokens = ["a", "b", "c", "{", "}", '"', ":", ","]
+token_map = {t: i for i, t in enumerate(tokens)}
+model = _FakeModel(token_map)
+vocab = Vocabulary(token_map)
+decoder = ConstrainedDecoder(model, vocab)
+
+@pytest.mark.parametrize(
+    ("start_state", "valid_tokens"),
+    [
+        (S.START, ["{"]),
+        (S.IN_KEY, ["a", "b", "c", "{", "}", '"', ":", ","]),
+    ],
+)
+def test_get_logit_mask(start_state, valid_tokens):
+    mask = decoder.get_logit_mask(start_state)
+    for i, token in enumerate(tokens):
+        if token not in valid_tokens:
+            assert mask[i] == -float('inf')
+        else:
+            assert mask[i] == 0

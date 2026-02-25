@@ -29,9 +29,9 @@ class ConstrainedDecoder:
         self.vocab: Vocabulary = vocab
         self.token_bytes: list[str] = [tokenizer.decode([i]) for i in range(vocab.size)]
 
-    def get_logit_mask(self, state: S):
+    def get_logit_mask(self, state: S) -> list[float]:
         mask = [-float('inf')] * self.vocab.size
-        for token_id, token_str in enumerate(self.token_bytes):
+        for token_id, token_str in enumerate(self.token_bytes[:100]):
             next_state = self.simulate(state, token_str)
             if next_state is not S.INVALID:
                 mask[token_id] = 0.0
