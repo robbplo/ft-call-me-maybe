@@ -47,13 +47,12 @@ class ConstrainedDecoder:
                     case char if char in WHITESPACE: state.s = JsonState.EXPECT_KEY
                     case _: state.s = JsonState.INVALID
             case JsonState.IN_KEY:
-                key_index = len(state.current_key)
-                if char in [key[key_index] for key in state.allowed_keys]:
-                    state.current_key += char
-                    
-                match char:
-                    case '"': state.s = JsonState.EXPECT_COLON
-                    case _: state.s = JsonState.IN_KEY
+                if not state.add_key_char(char):
+                    state.s = JsonState.INVALID
+                elif char == '"':
+                    state.s = JsonState.EXPECT_COLON
+                else:
+                    state.s = JsonState.IN_KEY
             case JsonState.IN_STRING:
                 match char:
                     case '"': state.s = JsonState.EXPECT_COMMA_OR_END
@@ -82,7 +81,7 @@ class ConstrainedDecoder:
                     case ',': state.s = JsonState.EXPECT_KEY
                     case '}': state.s = JsonState.END
                     case _: state.s = JsonState.INVALID
-            case JsonState.END :
+            case JsonState.END:
                 state.s = JsonState.INVALID
             case JsonState.INVALID:
                 pass

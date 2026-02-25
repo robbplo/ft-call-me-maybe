@@ -20,8 +20,21 @@ class State:
     keys: list[str] = field(default_factory=list)
     current_key: str = ""
 
-    def key_char_valid(self, char: str) -> bool:
+    def add_key_char(self, char: str) -> bool:
+        # End key
+        keys = [key for key in self.allowed_keys if key not in self.keys]
+        if char == '"':
+            allowed = self.current_key in keys
+            if allowed:
+                self.keys.append(self.current_key)
+                self.allowed_keys.remove(self.current_key)
+                self.current_key = ""
+            return allowed
+        # Add char
         index = len(self.current_key)
-        keys = [key for key in self.allowed_keys if self.current_key == key[:index] and len(key) > index]
+        keys = [key for key in keys if self.current_key == key[:index] and len(key) > index]
         chars = [key[index] for key in keys]
-        return char in chars
+        allowed = char in chars
+        if allowed:
+            self.current_key += char
+        return allowed

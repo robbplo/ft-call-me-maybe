@@ -40,10 +40,7 @@ decoder = ConstrainedDecoder(model, vocab)
         (JsonState.EXPECT_KEY, '       ', JsonState.EXPECT_KEY),
         # In key
         (JsonState.IN_KEY, 'a', JsonState.IN_KEY),
-        (JsonState.IN_KEY, ' b', JsonState.IN_KEY),
-        (JsonState.IN_KEY, 'c ', JsonState.IN_KEY),
-        (JsonState.IN_KEY, ':', JsonState.IN_KEY),
-        (JsonState.IN_KEY, '"', JsonState.EXPECT_COLON),
+        (JsonState.IN_KEY, 'aaa"', JsonState.EXPECT_COLON),
         # Expect colon
         (JsonState.EXPECT_COLON, 'a', JsonState.INVALID),
         (JsonState.EXPECT_COLON, ' ', JsonState.EXPECT_COLON),
@@ -72,19 +69,26 @@ decoder = ConstrainedDecoder(model, vocab)
         (JsonState.EXPECT_COMMA_OR_END, '}', JsonState.END),
         # Multiple states in one token
         (JsonState.START, '{a', JsonState.INVALID),
-        (JsonState.START, '{\n"asd', JsonState.IN_KEY),
-        (JsonState.START, '{"hi": 1', JsonState.IN_NUMBER),
-        (JsonState.START, '{"hi": 1}', JsonState.END),
-        (JsonState.START, '{"hi": 1, "and": "', JsonState.IN_STRING),
-        (JsonState.START, '{"hi": 1, "and": "t', JsonState.IN_STRING),
-        (JsonState.START, '{"hi": 1, "and": "t"', JsonState.EXPECT_COMMA_OR_END),
-        (JsonState.START, '{"hi": 1, "and": "t"}', JsonState.END),
+        (JsonState.START, '{\n"aaa', JsonState.IN_KEY),
+        (JsonState.START, '{"aaa": 1', JsonState.IN_NUMBER),
+        (JsonState.START, '{"aaa": 1}', JsonState.END),
+        (JsonState.START, '{"aaa": 1, "bbb": "', JsonState.IN_STRING),
+        (JsonState.START, '{"aaa": 1, "bbb": "t', JsonState.IN_STRING),
+        (JsonState.START, '{"aaa": 1, "bbb": "t"', JsonState.EXPECT_COMMA_OR_END),
+        (JsonState.START, '{"aaa": 1, "bbb": "t"}', JsonState.END),
 
     ],
 )
 def test_simulate_json(json_state, input_text, expected_state):
-    state = State(json_state, ["key1", "key2"])
+    state = State(json_state, ["aaa", "bbb"])
     assert decoder.simulate(state, input_text).s == expected_state
+
+def test_simulate_json_keys():
+    state = State(JsonState.START, ["key1", "key2"])
+    state = decoder.simulate(state, '{"')
+    assert state.s == JsonState.IN_KEY
+    state = decoder.simulate(state, 'key1"')
+    assert state.s == JsonState.EXPECT_COLON
 
 tokens = ["a", "b", "c", "{", "}", '"', ":", ","]
 token_map = {t: i for i, t in enumerate(tokens)}
@@ -96,11 +100,11 @@ decoder = ConstrainedDecoder(model, vocab)
     ("json_state", "valid_tokens"),
     [
         (JsonState.START, ["{"]),
-        (JsonState.IN_KEY, ["a", "b", "c", "{", "}", '"', ":", ","]),
+        (JsonState.IN_KEY, ["f", "a"]),
     ],
 )
 def test_get_logit_mask(json_state, valid_tokens):
-    mask = decoder.get_logit_mask(State(json_state, ["aaa", "abc"]))
+    mask = decoder.get_logit_mask(State(json_state, ["function", "arguments"]))
     print(mask)
     for i, token in enumerate(tokens):
         if token not in valid_tokens:
