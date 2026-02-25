@@ -1,10 +1,12 @@
-from enum import Enum, auto
+import copy
+from dataclasses import dataclass, field
+from enum import StrEnum, auto
 from typing import Protocol
 
 import torch
 from src.vocabulary import Vocabulary
 
-class S(Enum):
+class JsonState(StrEnum):
     START = auto()
     EXPECT_VALUE = auto()
     EXPECT_KEY = auto()
@@ -15,6 +17,13 @@ class S(Enum):
     IN_NUMBER = auto()
     INVALID = auto()
     END = auto()
+
+@dataclass()
+class State:
+    s: JsonState
+    allowed_keys: list[str]
+    keys: list[str] = field(default_factory=list)
+    current_key: str = ""
 
 WHITESPACE = set(" \t\n\r")
 DIGITS = set("0123456789")
@@ -29,69 +38,71 @@ class ConstrainedDecoder:
         self.vocab: Vocabulary = vocab
         self.token_bytes: list[str] = [tokenizer.decode([i]) for i in range(vocab.size)]
 
-    def get_logit_mask(self, state: S) -> list[float]:
+    def get_logit_mask(self, state: State) -> list[float]:
         mask = [-float('inf')] * self.vocab.size
-        for token_id, token_str in enumerate(self.token_bytes[:100]):
-            next_state = self.simulate(state, token_str)
-            if next_state is not S.INVALID:
+        for token_id, token_str in enumerate(self.token_bytes):
+            next_state = self.simulate(copy.deepcopy(state), token_str)
+            if next_state.s is not JsonState.INVALID:
                 mask[token_id] = 0.0
         return mask
 
-    def simulate(self, state: S, token: str) -> S:
+    def simulate(self, state: State, token: str) -> State:
         for char in token:
             state = self._simulate_char(state, char)
-            if state is S.INVALID:
+            if state.s is JsonState.INVALID:
                 return state
         return state
 
-    def _simulate_char(self, state: S, char: str) -> S:
-        match state:
-            case S.START:
+    def _simulate_char(self, state: State, char: str) -> State:
+        match state.s:
+            case JsonState.START:
                 match char:
-                    case '{': return S.EXPECT_KEY
-                    case char if char in WHITESPACE: return S.START
-                    case _: return S.INVALID
-            case S.EXPECT_KEY:
+                    case '{': state.s = JsonState.EXPECT_KEY
+                    case char if char in WHITESPACE: state.s = JsonState.START
+                    case _: state.s = JsonState.INVALID
+            case JsonState.EXPECT_KEY:
                 match char:
-                    case '"': return S.IN_KEY
-                    case char if char in WHITESPACE: return S.EXPECT_KEY
-                    case _: return S.INVALID
-            case S.IN_KEY:
+                    case '"': state.s = JsonState.IN_KEY
+                    case char if char in WHITESPACE: state.s = JsonState.EXPECT_KEY
+                    case _: state.s = JsonState.INVALID
+            case JsonState.IN_KEY:
                 match char:
-                    case '"': return S.EXPECT_COLON
-                    case _: return S.IN_KEY
-            case S.IN_STRING:
+                    case '"': state.s = JsonState.EXPECT_COLON
+                    case _: state.s = JsonState.IN_KEY
+            case JsonState.IN_STRING:
                 match char:
-                    case '"': return S.EXPECT_COMMA_OR_END
-                    case _: return S.IN_STRING
-            case S.EXPECT_COLON:
+                    case '"': state.s = JsonState.EXPECT_COMMA_OR_END
+                    case _: state.s = JsonState.IN_STRING
+            case JsonState.EXPECT_COLON:
                 match char:
-                    case ':': return S.EXPECT_VALUE
-                    case char if char in WHITESPACE: return S.EXPECT_COLON
-                    case _: return S.INVALID
-            case S.EXPECT_VALUE:
+                    case ':': state.s = JsonState.EXPECT_VALUE
+                    case char if char in WHITESPACE: state.s = JsonState.EXPECT_COLON
+                    case _: state.s = JsonState.INVALID
+            case JsonState.EXPECT_VALUE:
                 match char:
-                    case '"': return S.IN_STRING
-                    case char if char in WHITESPACE: return S.EXPECT_VALUE
-                    case char if char in DIGITS: return S.IN_NUMBER
-                    case _: return S.INVALID
-            case S.EXPECT_COMMA_OR_END:
+                    case '"': state.s = JsonState.IN_STRING
+                    case char if char in WHITESPACE: state.s = JsonState.EXPECT_VALUE
+                    case char if char in DIGITS: state.s = JsonState.IN_NUMBER
+                    case _: state.s = JsonState.INVALID
+            case JsonState.EXPECT_COMMA_OR_END:
                 match char:
-                    case ',': return S.EXPECT_KEY
-                    case '}': return S.END
-                    case char if char in WHITESPACE: return S.EXPECT_COMMA_OR_END
-                    case _: return S.INVALID
-            case S.IN_NUMBER:
+                    case ',': state.s = JsonState.EXPECT_KEY
+                    case '}': state.s = JsonState.END
+                    case char if char in WHITESPACE: state.s = JsonState.EXPECT_COMMA_OR_END
+                    case _: state.s = JsonState.INVALID
+            case JsonState.IN_NUMBER:
                 match char:
-                    case char if char in DIGITS: return S.IN_NUMBER
-                    case char if char in WHITESPACE: return S.EXPECT_COMMA_OR_END
-                    case ',': return S.EXPECT_KEY
-                    case '}': return S.END
-                    case _: return S.INVALID
-            case S.END :
-                return S.INVALID
-            case S.INVALID:
-                return S.INVALID
+                    case char if char in DIGITS: state.s = JsonState.IN_NUMBER
+                    case char if char in WHITESPACE: state.s = JsonState.EXPECT_COMMA_OR_END
+                    case ',': state.s = JsonState.EXPECT_KEY
+                    case '}': state.s = JsonState.END
+                    case _: state.s = JsonState.INVALID
+            case JsonState.END :
+                state.s = JsonState.INVALID
+            case JsonState.INVALID:
+                pass
+
+        return state
 
 
 

@@ -1,4 +1,4 @@
-from src.constrained_decoder import ConstrainedDecoder, S
+from src.constrained_decoder import ConstrainedDecoder, JsonState, State
 from src.vocabulary import Vocabulary
 from llm_sdk import Small_LLM_Model
 import json
@@ -25,23 +25,27 @@ def main():
     vocabulary = Vocabulary(token_map)
     decoder = ConstrainedDecoder(model, vocabulary)
 
-    prompt = "generate a json with key 'hello' and value 'world'. JSON:"
+    prompt = "say 'hello'"
     print(prompt)
 
     result = ""
-    state = S.START
+    state = State(JsonState.START, ["hello"])
     for _ in range(10):
         ids = model.encode(prompt + result)
         logits = model.get_logits_from_input_ids(ids.tolist()[0])
         mask = decoder.get_logit_mask(state)
         masked_logits = [a + b for a, b in zip(logits, mask)]
 
+        print(mask[:100])
+        print([vocabulary[i] for i, logit in enumerate(mask[:100]) if logit >= 0])
         max_index = masked_logits.index(max(masked_logits))
         # if masked_logits[max_index] < 0:
         #     raise ValueError("No masked logit greater than 0")
         token = model.decode([max_index])
         result += token
         state = decoder.simulate(state, token)
+        assert state.s != JsonState.INVALID
+        print(state)
     print(result)
 
     # token = decoder.token_bytes[max_index]

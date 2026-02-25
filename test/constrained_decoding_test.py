@@ -5,7 +5,7 @@ import pytest
 import torch
 
 from src.vocabulary import Vocabulary
-from src.constrained_decoder import ConstrainedDecoder, S
+from src.constrained_decoder import ConstrainedDecoder, JsonState, State
 
 class _FakeModel:
     def __init__(self, token_map: dict[str, int]) -> None:
@@ -22,68 +22,69 @@ vocab = Vocabulary(token_map)
 decoder = ConstrainedDecoder(model, vocab)
 
 @pytest.mark.parametrize(
-    ("start_state", "input_text", "expected_state"),
+    ("json_state", "input_text", "expected_state"),
     [
         # Start
-        (S.START, 'a', S.INVALID),
-        (S.START, ' b', S.INVALID),
-        (S.START, 'c ', S.INVALID),
-        (S.START, '       ', S.START),
-        (S.START, '}', S.INVALID),
-        (S.START, '{', S.EXPECT_KEY),
-        (S.START, ' {', S.EXPECT_KEY),
+        (JsonState.START, 'a', JsonState.INVALID),
+        (JsonState.START, ' b', JsonState.INVALID),
+        (JsonState.START, 'c ', JsonState.INVALID),
+        (JsonState.START, '       ', JsonState.START),
+        (JsonState.START, '}', JsonState.INVALID),
+        (JsonState.START, '{', JsonState.EXPECT_KEY),
+        (JsonState.START, ' {', JsonState.EXPECT_KEY),
         # Expect key
-        (S.EXPECT_KEY, 'a', S.INVALID),
-        (S.EXPECT_KEY, ' b', S.INVALID),
-        (S.EXPECT_KEY, 'c ', S.INVALID),
-        (S.EXPECT_KEY, '"', S.IN_KEY),
-        (S.EXPECT_KEY, '       ', S.EXPECT_KEY),
+        (JsonState.EXPECT_KEY, 'a', JsonState.INVALID),
+        (JsonState.EXPECT_KEY, ' b', JsonState.INVALID),
+        (JsonState.EXPECT_KEY, 'c ', JsonState.INVALID),
+        (JsonState.EXPECT_KEY, '"', JsonState.IN_KEY),
+        (JsonState.EXPECT_KEY, '       ', JsonState.EXPECT_KEY),
         # In key
-        (S.IN_KEY, 'a', S.IN_KEY),
-        (S.IN_KEY, ' b', S.IN_KEY),
-        (S.IN_KEY, 'c ', S.IN_KEY),
-        (S.IN_KEY, ':', S.IN_KEY),
-        (S.IN_KEY, '"', S.EXPECT_COLON),
+        (JsonState.IN_KEY, 'a', JsonState.IN_KEY),
+        (JsonState.IN_KEY, ' b', JsonState.IN_KEY),
+        (JsonState.IN_KEY, 'c ', JsonState.IN_KEY),
+        (JsonState.IN_KEY, ':', JsonState.IN_KEY),
+        (JsonState.IN_KEY, '"', JsonState.EXPECT_COLON),
         # Expect colon
-        (S.EXPECT_COLON, 'a', S.INVALID),
-        (S.EXPECT_COLON, ' ', S.EXPECT_COLON),
-        (S.EXPECT_COLON, ':', S.EXPECT_VALUE),
+        (JsonState.EXPECT_COLON, 'a', JsonState.INVALID),
+        (JsonState.EXPECT_COLON, ' ', JsonState.EXPECT_COLON),
+        (JsonState.EXPECT_COLON, ':', JsonState.EXPECT_VALUE),
         # Expect value
-        (S.EXPECT_VALUE, 'a', S.INVALID),
-        (S.EXPECT_VALUE, ' ', S.EXPECT_VALUE),
-        (S.EXPECT_VALUE, '1', S.IN_NUMBER),
-        (S.EXPECT_VALUE, '"', S.IN_STRING),
+        (JsonState.EXPECT_VALUE, 'a', JsonState.INVALID),
+        (JsonState.EXPECT_VALUE, ' ', JsonState.EXPECT_VALUE),
+        (JsonState.EXPECT_VALUE, '1', JsonState.IN_NUMBER),
+        (JsonState.EXPECT_VALUE, '"', JsonState.IN_STRING),
         # In number
-        (S.IN_NUMBER, 'a', S.INVALID),
-        (S.IN_NUMBER, '1', S.IN_NUMBER),
-        (S.IN_NUMBER, ' ', S.EXPECT_COMMA_OR_END),
-        (S.IN_NUMBER, ',', S.EXPECT_KEY),
-        (S.IN_NUMBER, '}', S.END),
+        (JsonState.IN_NUMBER, 'a', JsonState.INVALID),
+        (JsonState.IN_NUMBER, '1', JsonState.IN_NUMBER),
+        (JsonState.IN_NUMBER, ' ', JsonState.EXPECT_COMMA_OR_END),
+        (JsonState.IN_NUMBER, ',', JsonState.EXPECT_KEY),
+        (JsonState.IN_NUMBER, '}', JsonState.END),
         # In string
-        (S.IN_STRING, 'a', S.IN_STRING),
-        (S.IN_STRING, '1', S.IN_STRING),
-        (S.IN_STRING, ' ', S.IN_STRING),
-        (S.IN_STRING, ',', S.IN_STRING),
-        (S.IN_STRING, '"', S.EXPECT_COMMA_OR_END),
+        (JsonState.IN_STRING, 'a', JsonState.IN_STRING),
+        (JsonState.IN_STRING, '1', JsonState.IN_STRING),
+        (JsonState.IN_STRING, ' ', JsonState.IN_STRING),
+        (JsonState.IN_STRING, ',', JsonState.IN_STRING),
+        (JsonState.IN_STRING, '"', JsonState.EXPECT_COMMA_OR_END),
         # Expect comma or end
-        (S.EXPECT_COMMA_OR_END, 'a', S.INVALID),
-        (S.EXPECT_COMMA_OR_END, ' ', S.EXPECT_COMMA_OR_END),
-        (S.EXPECT_COMMA_OR_END, ',', S.EXPECT_KEY),
-        (S.EXPECT_COMMA_OR_END, '}', S.END),
+        (JsonState.EXPECT_COMMA_OR_END, 'a', JsonState.INVALID),
+        (JsonState.EXPECT_COMMA_OR_END, ' ', JsonState.EXPECT_COMMA_OR_END),
+        (JsonState.EXPECT_COMMA_OR_END, ',', JsonState.EXPECT_KEY),
+        (JsonState.EXPECT_COMMA_OR_END, '}', JsonState.END),
         # Multiple states in one token
-        (S.START, '{a', S.INVALID),
-        (S.START, '{\n"asd', S.IN_KEY),
-        (S.START, '{"hi": 1', S.IN_NUMBER),
-        (S.START, '{"hi": 1}', S.END),
-        (S.START, '{"hi": 1, "and": "', S.IN_STRING),
-        (S.START, '{"hi": 1, "and": "t', S.IN_STRING),
-        (S.START, '{"hi": 1, "and": "t"', S.EXPECT_COMMA_OR_END),
-        (S.START, '{"hi": 1, "and": "t"}', S.END),
+        (JsonState.START, '{a', JsonState.INVALID),
+        (JsonState.START, '{\n"asd', JsonState.IN_KEY),
+        (JsonState.START, '{"hi": 1', JsonState.IN_NUMBER),
+        (JsonState.START, '{"hi": 1}', JsonState.END),
+        (JsonState.START, '{"hi": 1, "and": "', JsonState.IN_STRING),
+        (JsonState.START, '{"hi": 1, "and": "t', JsonState.IN_STRING),
+        (JsonState.START, '{"hi": 1, "and": "t"', JsonState.EXPECT_COMMA_OR_END),
+        (JsonState.START, '{"hi": 1, "and": "t"}', JsonState.END),
 
     ],
 )
-def test_simulate_json(start_state, input_text, expected_state):
-    assert decoder.simulate(start_state, input_text) == expected_state
+def test_simulate_json(json_state, input_text, expected_state):
+    state = State(json_state, ["key1", "key2"])
+    assert decoder.simulate(state, input_text).s == expected_state
 
 tokens = ["a", "b", "c", "{", "}", '"', ":", ","]
 token_map = {t: i for i, t in enumerate(tokens)}
@@ -92,16 +93,17 @@ vocab = Vocabulary(token_map)
 decoder = ConstrainedDecoder(model, vocab)
 
 @pytest.mark.parametrize(
-    ("start_state", "valid_tokens"),
+    ("json_state", "valid_tokens"),
     [
-        (S.START, ["{"]),
-        (S.IN_KEY, ["a", "b", "c", "{", "}", '"', ":", ","]),
+        (JsonState.START, ["{"]),
+        (JsonState.IN_KEY, ["a", "b", "c", "{", "}", '"', ":", ","]),
     ],
 )
-def test_get_logit_mask(start_state, valid_tokens):
-    mask = decoder.get_logit_mask(start_state)
+def test_get_logit_mask(json_state, valid_tokens):
+    mask = decoder.get_logit_mask(State(json_state, ["aaa", "abc"]))
+    print(mask)
     for i, token in enumerate(tokens):
         if token not in valid_tokens:
-            assert mask[i] == -float('inf')
+            assert mask[i] == float('-inf')
         else:
             assert mask[i] == 0

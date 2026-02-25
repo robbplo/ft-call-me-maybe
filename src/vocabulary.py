@@ -16,3 +16,9 @@ class Vocabulary:
             vocab = cast(dict[str, int], json.load(f))
         return Vocabulary(vocab)
 
+    def __getitem__(self, key: str | int) -> str | int:
+        if isinstance(key, str):
+            return self.data[key]
+        return self.reverse[key]
+
+
