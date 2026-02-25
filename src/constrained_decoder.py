@@ -1,29 +1,10 @@
+from src.state import State, JsonState
 import copy
-from dataclasses import dataclass, field
-from enum import StrEnum, auto
 from typing import Protocol
 
 import torch
 from src.vocabulary import Vocabulary
 
-class JsonState(StrEnum):
-    START = auto()
-    EXPECT_VALUE = auto()
-    EXPECT_KEY = auto()
-    EXPECT_COMMA_OR_END = auto()
-    EXPECT_COLON = auto()
-    IN_KEY = auto()
-    IN_STRING = auto()
-    IN_NUMBER = auto()
-    INVALID = auto()
-    END = auto()
-
-@dataclass()
-class State:
-    s: JsonState
-    allowed_keys: list[str]
-    keys: list[str] = field(default_factory=list)
-    current_key: str = ""
 
 WHITESPACE = set(" \t\n\r")
 DIGITS = set("0123456789")
@@ -66,6 +47,10 @@ class ConstrainedDecoder:
                     case char if char in WHITESPACE: state.s = JsonState.EXPECT_KEY
                     case _: state.s = JsonState.INVALID
             case JsonState.IN_KEY:
+                key_index = len(state.current_key)
+                if char in [key[key_index] for key in state.allowed_keys]:
+                    state.current_key += char
+                    
                 match char:
                     case '"': state.s = JsonState.EXPECT_COLON
                     case _: state.s = JsonState.IN_KEY
