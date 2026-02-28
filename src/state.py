@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
-from enum import StrEnum, auto
+from enum import Enum, auto
 
-class JsonState(StrEnum):
+class JsonState(Enum):
     START = auto()
     EXPECT_VALUE = auto()
     EXPECT_KEY = auto()

@@ -41,7 +41,7 @@ def main():
         token = model.decode([max_index])
         result += token
         # print(state, token)
-        state = decoder.simulate(state, token)
+        state = decoder._simulate_structure(state, token)
         if state.s == JsonState.END:
             break
         assert state.s != JsonState.INVALID
