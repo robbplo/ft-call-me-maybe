@@ -3,7 +3,6 @@ import torch
 
 from src.constrained_string_decoder import (
     ConstrainedStringDecoder,
-    StringState,
 )
 from src.vocabulary import Vocabulary
 
@@ -20,77 +19,75 @@ class _FakeModel:
 
 def _make_decoder(
     token_map: dict[str, int],
-    allowed_strings: list[str],
 ) -> ConstrainedStringDecoder:
     model = _FakeModel(token_map)
     vocab = Vocabulary(token_map)
-    return ConstrainedStringDecoder(model, vocab, allowed_strings)
+    return ConstrainedStringDecoder(model, vocab)
+
+
+def _prefixes(allowed_strings: list[str]) -> set[str]:
+    allowed_set = set(allowed_strings)
+    return {
+        allowed[:index]
+        for allowed in allowed_set
+        for index in range(len(allowed) + 1)
+    }
 
 
 @pytest.mark.parametrize(
-    ("initial_value", "initial_state", "token", "expected_state", "expected_value"),
+    ("initial_value", "token", "expected_valid"),
     [
-        ("", StringState.START, "c", StringState.IN_STRING, "c"),
-        ("", StringState.START, "ca", StringState.IN_STRING, "ca"),
-        ("", StringState.START, "cat", StringState.COMPLETE, "cat"),
-        ("", StringState.START, "dog", StringState.COMPLETE, "dog"),
-        ("", StringState.START, "z", StringState.INVALID, ""),
-        ("ca", StringState.IN_STRING, "r", StringState.COMPLETE, "car"),
-        ("cat", StringState.COMPLETE, "x", StringState.INVALID, "cat"),
+        ("", "c", True),
+        ("", "ca", True),
+        ("", "cat", True),
+        ("", "dog", True),
+        ("", "z", False),
+        ("ca", "r", True),
+        ("cat", "x", False),
     ],
 )
 def test_simulate_structure(
     initial_value,
-    initial_state,
     token,
-    expected_state,
-    expected_value,
+    expected_valid,
 ):
-    decoder = _make_decoder(
-        {"c": 0, "a": 1, "t": 2, "r": 3, "d": 4, "o": 5, "g": 6, "x": 7, "z": 8},
-        ["cat", "car", "dog"],
-    )
-    value, state = decoder._simulate_structure(initial_value, initial_state, token)
-    assert state is expected_state
-    assert value == expected_value
+    decoder = _make_decoder({"c": 0, "a": 1, "t": 2, "r": 3, "d": 4, "o": 5, "g": 6, "x": 7, "z": 8})
+    prefixes = _prefixes(["cat", "car", "dog"])
+    assert decoder._simulate_structure(initial_value, token, prefixes) is expected_valid
 
 
 def test_get_logit_mask_by_prefix():
     token_map = {"c": 0, "d": 1, "x": 2, "a": 3, "o": 4, "t": 5, "r": 6, "g": 7}
-    decoder = _make_decoder(token_map, ["cat", "car", "dog"])
+    decoder = _make_decoder(token_map)
+    allowed_strings = ["cat", "car", "dog"]
 
-    start_mask = decoder.get_logit_mask("", StringState.START)
+    start_mask = decoder.get_logit_mask("", allowed_strings)
     start_valid = {token for token, idx in token_map.items() if start_mask[idx] == 0.0}
     assert start_valid == {"c", "d"}
 
-    ca_value, ca_state = decoder._simulate_structure("", StringState.START, "ca")
-    ca_mask = decoder.get_logit_mask(ca_value, ca_state)
+    ca_mask = decoder.get_logit_mask("ca", allowed_strings)
     ca_valid = {token for token, idx in token_map.items() if ca_mask[idx] == 0.0}
     assert ca_valid == {"t", "r"}
 
-    cat_value, cat_state = decoder._simulate_structure("", StringState.START, "cat")
-    cat_mask = decoder.get_logit_mask(cat_value, cat_state)
+    cat_mask = decoder.get_logit_mask("cat", allowed_strings)
     cat_valid = {token for token, idx in token_map.items() if cat_mask[idx] == 0.0}
     assert cat_valid == set()
 
 
 def test_complete_value_can_still_continue_when_prefix_overlaps():
     token_map = {"a": 0, "b": 1, "x": 2}
-    decoder = _make_decoder(token_map, ["a", "ab"])
+    decoder = _make_decoder(token_map)
+    allowed_strings = ["a", "ab"]
 
-    value, state = decoder._simulate_structure("", StringState.START, "a")
-    assert state is StringState.COMPLETE
-    assert value == "a"
+    assert decoder._simulate_structure("", "a", _prefixes(allowed_strings)) is True
 
-    mask = decoder.get_logit_mask(value, state)
+    mask = decoder.get_logit_mask("a", allowed_strings)
     valid = {token for token, idx in token_map.items() if mask[idx] == 0.0}
     assert valid == {"b"}
 
-    next_value, next_state = decoder._simulate_structure(value, state, "b")
-    assert next_state is StringState.COMPLETE
-    assert next_value == "ab"
+    assert decoder._simulate_structure("a", "b", _prefixes(allowed_strings)) is True
 
 
 def test_empty_allowed_strings_raises():
     with pytest.raises(ValueError):
-        _make_decoder({"a": 0}, [])
+        _make_decoder({"a": 0}).get_logit_mask("", [])
