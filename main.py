@@ -8,15 +8,6 @@ def load_token_map(vocab_path) -> dict[str, int]:
         vocab = json.load(f)
     return vocab
 
-def apply_mask(logits: list[float], mask: list[float]) -> list[float]:
-    # mask_len = len(mask)
-    for i in range(len(logits)):
-        print("before:", i, logits[i], mask[i])
-        logits[i] += mask[i]
-        print("after:", i, logits[i])
-
-    return logits
-
 def main():
     model = Small_LLM_Model()
 
@@ -40,8 +31,8 @@ def main():
         # print([vocabulary[i] for i, l in enumerate(masked_logits) if l != float('-inf')])
         token = model.decode([max_index])
         result += token
-        # print(state, token)
-        state = decoder._simulate_structure(state, token)
+        # print(state.s, token, max_index)
+        state.s = decoder._simulate_structure(state.s, token)
         if state.s == JsonState.END:
             break
         assert state.s != JsonState.INVALID

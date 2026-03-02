@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 
 class JsonState(Enum):
-    START = auto()
+    START = 0
     EXPECT_VALUE = auto()
     EXPECT_KEY = auto()
     EXPECT_COMMA_OR_END = auto()
