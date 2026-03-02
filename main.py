@@ -9,21 +9,16 @@ def load_token_map(vocab_path) -> dict[str, int]:
         vocab = json.load(f)
     return vocab
 
-def main():
-    model = Small_LLM_Model()
-
-    token_map = load_token_map(model.get_path_to_vocabulary_json())
-
-    vocabulary = Vocabulary(token_map)
+def pick_functions(model: Small_LLM_Model, vocabulary: Vocabulary, token_map: dict[str, int]):
     functions = [
-  "fn_add_numbers",
-  "fn_get_square_root",
-  "fn_greet",
-  "fn_is_even",
-  "fn_multiply_numbers",
-  "fn_reverse_string",
-  "fn_substitute_string_with_regex"
-]
+      "fn_add_numbers",
+      "fn_get_square_root",
+      "fn_greet",
+      "fn_is_even",
+      "fn_multiply_numbers",
+      "fn_reverse_string",
+      "fn_substitute_string_with_regex"
+    ]
     decoder = ConstrainedStringDecoder(model, vocabulary, functions)
     tests = []
     with open("./data/input/function_calling_tests.json", "r") as f:
@@ -45,14 +40,20 @@ The function which applies best to the question is: """
 
             max_index = masked_logits.index(max(masked_logits))
             token = model.decode([max_index])
-            if token == "!":
-                break
             result += token
-            state = decoder._simulate_structure(result, StringState.START, token)
-            if state == StringState.COMPLETE:
+
+            substrings = [f for f in functions if f.startswith(result)]
+            if len(substrings) == 1:
+                result = substrings[0]
                 break
-            assert state != StringState.INVALID
         print(result)
+
+def main():
+    model = Small_LLM_Model()
+    token_map = load_token_map(model.get_path_to_vocabulary_json())
+    vocabulary = Vocabulary(token_map)
+
+    # pick_functions(model, vocabulary, token_map)
 
     # decoder = ConstrainedJSONDecoder(model, vocabulary)
     #
