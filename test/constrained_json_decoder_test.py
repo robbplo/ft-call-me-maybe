@@ -5,7 +5,7 @@ import pytest
 import torch
 
 from src.vocabulary import Vocabulary
-from src.constrained_decoder import ConstrainedDecoder, JsonState, State
+from src.constrained_decoder import ConstrainedJSONDecoder, JsonState, State
 
 class _FakeModel:
     def __init__(self, token_map: dict[str, int]) -> None:
@@ -19,7 +19,7 @@ class _FakeModel:
 token_map = {"a": 0, "b": 1, "c": 2}
 model = _FakeModel(token_map)
 vocab = Vocabulary(token_map)
-decoder = ConstrainedDecoder(model, vocab)
+decoder = ConstrainedJSONDecoder(model, vocab)
 
 @pytest.mark.parametrize(
     ("json_state", "input_text", "expected_state"),

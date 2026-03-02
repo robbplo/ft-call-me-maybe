@@ -1,4 +1,4 @@
-from src.constrained_decoder import ConstrainedDecoder, JsonState, State
+from src.constrained_decoder import ConstrainedJSONDecoder, JsonState, State
 from src.vocabulary import Vocabulary
 from llm_sdk import Small_LLM_Model
 import json
@@ -14,7 +14,7 @@ def main():
     token_map = load_token_map(model.get_path_to_vocabulary_json())
 
     vocabulary = Vocabulary(token_map)
-    decoder = ConstrainedDecoder(model, vocabulary)
+    decoder = ConstrainedJSONDecoder(model, vocabulary)
 
     prompt = "say 'hello'"
     print(prompt)

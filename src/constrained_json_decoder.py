@@ -13,7 +13,7 @@ class Tokenizer(Protocol):
     def decode(self, ids: torch.Tensor | list[int]) -> str:
         ...
 
-class ConstrainedDecoder:
+class ConstrainedJSONDecoder:
     def __init__(self, tokenizer: Tokenizer, vocab: Vocabulary):
         self.model: Tokenizer = tokenizer
         self.vocab: Vocabulary = vocab
