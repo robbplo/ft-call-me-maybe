@@ -52,34 +52,53 @@ The function which applies best to the question is: """
 def generate_json(model: Small_LLM_Model, vocabulary: Vocabulary):
     decoder = ConstrainedJSONDecoder(model, vocabulary)
 
-    prompt = "Here is a json which contains the key 'hello' with the value 'world':"
+    question = "Replace all vowels in 'Programming is fun' with asterisks"
+    prompt = f"""
+PROMPT: {question}
+ARGUMENTS: 
+- regex
+- source_string
+- replacement
+FUNCTION CALL: """
     print(prompt)
 
-    result = ""
-    state = State(JsonState.START, allowed_keys=["hello"])
-    for _ in range(100):
+    result = '{' + \
+    f'"prompt": "{question}",' + \
+    '"fn_name": "fn_substitute_string_with_regex",' + \
+    '"args": {"regex": "'
+    print(result, end="")
+    state = State(JsonState.START, depth=0, allowed_keys=["hello"])
+    next_s, next_depth = decoder._simulate_structure(state.s, result, state.depth)
+    state.s = next_s
+    state.depth = next_depth
+    for _ in range(50):
         ids = model.encode(prompt + result)
         logits = model.get_logits_from_input_ids(ids.tolist()[0])
-        mask = decoder.get_logit_mask(state)
-        masked_logits = [a + b for a, b in zip(logits, mask)]
+        masked_logits = logits
+        # mask = decoder.get_logit_mask(state)
+        # masked_logits = [a + b for a, b in zip(logits, mask)]
         max_index = masked_logits.index(max(masked_logits))
         # print([vocabulary[i] for i, l in enumerate(masked_logits) if l != float('-inf')])
         token = model.decode([max_index])
         result += token
         # print(state.s, token, max_index)
-        state.s = decoder._simulate_structure(state.s, token)
+        next_s, next_depth = decoder._simulate_structure(state.s, token, state.depth)
+        state.s = next_s
+        state.depth = next_depth
         print(token, end="", flush=True)
         if state.s == JsonState.END:
             break
         assert state.s != JsonState.INVALID
+    print("Final result: \n")
+    print(result)
 
 def main():
     model = Small_LLM_Model()
     token_map = load_token_map(model.get_path_to_vocabulary_json())
     vocabulary = Vocabulary(token_map)
 
-    pick_functions(model, vocabulary)
-    # generate_json(model, vocabulary)
+    # pick_functions(model, vocabulary)
+    generate_json(model, vocabulary)
 
 
 if __name__ == "__main__":

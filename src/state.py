@@ -16,6 +16,7 @@ class JsonState(Enum):
 @dataclass()
 class State:
     s: JsonState
+    depth: int
     allowed_keys: list[str]
     keys: list[str] = field(default_factory=list)
     current_key: str = ""
