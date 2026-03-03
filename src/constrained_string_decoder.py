@@ -32,20 +32,6 @@ class ConstrainedStringDecoder:
     def get_logit_mask(self, value: str) -> list[float]:
         mask = [-float("inf")] * self.vocab.size
         for token_id, token_str in enumerate(self.token_bytes):
-            if self._simulate_structure(value, token_str):
+            if value + token_str in self.prefixes:
                 mask[token_id] = 0.0
         return cast(list[float], mask)
-
-    def _simulate_structure(
-        self,
-        value: str,
-        token: str,
-    ) -> bool:
-        next_value = value
-
-        for char in token:
-            next_value += char
-            if next_value not in self.prefixes:
-                return False
-
-        return True

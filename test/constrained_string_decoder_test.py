@@ -19,75 +19,61 @@ class _FakeModel:
 
 def _make_decoder(
     token_map: dict[str, int],
+    allowed_strings: list[str],
 ) -> ConstrainedStringDecoder:
     model = _FakeModel(token_map)
     vocab = Vocabulary(token_map)
-    return ConstrainedStringDecoder(model, vocab)
-
-
-def _prefixes(allowed_strings: list[str]) -> set[str]:
-    allowed_set = set(allowed_strings)
-    return {
-        allowed[:index]
-        for allowed in allowed_set
-        for index in range(len(allowed) + 1)
-    }
-
-
-@pytest.mark.parametrize(
-    ("initial_value", "token", "expected_valid"),
-    [
-        ("", "c", True),
-        ("", "ca", True),
-        ("", "cat", True),
-        ("", "dog", True),
-        ("", "z", False),
-        ("ca", "r", True),
-        ("cat", "x", False),
-    ],
-)
-def test_simulate_structure(
-    initial_value,
-    token,
-    expected_valid,
-):
-    decoder = _make_decoder({"c": 0, "a": 1, "t": 2, "r": 3, "d": 4, "o": 5, "g": 6, "x": 7, "z": 8})
-    prefixes = _prefixes(["cat", "car", "dog"])
-    assert decoder._simulate_structure(initial_value, token, prefixes) is expected_valid
+    return ConstrainedStringDecoder(model, vocab, allowed_strings)
 
 
 def test_get_logit_mask_by_prefix():
-    token_map = {"c": 0, "d": 1, "x": 2, "a": 3, "o": 4, "t": 5, "r": 6, "g": 7}
-    decoder = _make_decoder(token_map)
     allowed_strings = ["cat", "car", "dog"]
+    token_map = {
+        "c": 0,
+        "d": 1,
+        "x": 2,
+        "a": 3,
+        "o": 4,
+        "t": 5,
+        "r": 6,
+        "g": 7,
+        "ca": 8,
+        "cat": 9,
+        "dog": 10,
+    }
+    decoder = _make_decoder(token_map, allowed_strings)
 
-    start_mask = decoder.get_logit_mask("", allowed_strings)
+    start_mask = decoder.get_logit_mask("")
     start_valid = {token for token, idx in token_map.items() if start_mask[idx] == 0.0}
-    assert start_valid == {"c", "d"}
+    assert start_valid == {"c", "d", "ca", "cat", "dog"}
 
-    ca_mask = decoder.get_logit_mask("ca", allowed_strings)
+    ca_mask = decoder.get_logit_mask("ca")
     ca_valid = {token for token, idx in token_map.items() if ca_mask[idx] == 0.0}
     assert ca_valid == {"t", "r"}
 
-    cat_mask = decoder.get_logit_mask("cat", allowed_strings)
+    cat_mask = decoder.get_logit_mask("cat")
     cat_valid = {token for token, idx in token_map.items() if cat_mask[idx] == 0.0}
     assert cat_valid == set()
 
 
 def test_complete_value_can_still_continue_when_prefix_overlaps():
     token_map = {"a": 0, "b": 1, "x": 2}
-    decoder = _make_decoder(token_map)
     allowed_strings = ["a", "ab"]
+    decoder = _make_decoder(token_map, allowed_strings)
 
-    assert decoder._simulate_structure("", "a", _prefixes(allowed_strings)) is True
+    start_mask = decoder.get_logit_mask("")
+    start_valid = {token for token, idx in token_map.items() if start_mask[idx] == 0.0}
+    assert start_valid == {"a"}
 
-    mask = decoder.get_logit_mask("a", allowed_strings)
+    mask = decoder.get_logit_mask("a")
     valid = {token for token, idx in token_map.items() if mask[idx] == 0.0}
     assert valid == {"b"}
 
-    assert decoder._simulate_structure("a", "b", _prefixes(allowed_strings)) is True
+    complete_mask = decoder.get_logit_mask("ab")
+    complete_valid = {token for token, idx in token_map.items() if complete_mask[idx] == 0.0}
+    assert complete_valid == set()
 
 
 def test_empty_allowed_strings_raises():
     with pytest.raises(ValueError):
-        _make_decoder({"a": 0}).get_logit_mask("", [])
+        _make_decoder({"a": 0}, [])
