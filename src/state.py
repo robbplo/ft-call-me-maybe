@@ -21,21 +21,25 @@ class State:
     keys: list[str] = field(default_factory=list)
     current_key: str = ""
 
-    def add_key_char(self, char: str) -> bool:
+    def add_key_char(self, char: str) -> tuple[bool, list[str], str]:
+        # Key schema only applies to depth = 2
+        if self.depth != 2 or self.s != JsonState.IN_KEY:
+            return (True, self.keys, self.current_key)
         # End key
-        keys = [key for key in self.allowed_keys if key not in self.keys]
+        remaining_keys = [key for key in self.allowed_keys if key not in self.keys]
+        keys = self.keys.copy()
+        current_key = self.current_key
         if char == '"':
-            allowed = self.current_key in keys
+            allowed = self.current_key in remaining_keys
             if allowed:
-                self.keys.append(self.current_key)
-                self.allowed_keys.remove(self.current_key)
-                self.current_key = ""
-            return allowed
+                keys.append(self.current_key)
+                current_key = ""
+            return (allowed, keys, current_key)
         # Add char
         index = len(self.current_key)
-        keys = [key for key in keys if self.current_key == key[:index] and len(key) > index]
-        chars = [key[index] for key in keys]
+        remaining_keys = [key for key in remaining_keys if self.current_key == key[:index] and len(key) > index]
+        chars = [key[index] for key in remaining_keys]
         allowed = char in chars
         if allowed:
-            self.current_key += char
-        return allowed
+            current_key += char
+        return (allowed, keys, current_key)

@@ -1,37 +1,61 @@
-from src.state import State, JsonState
+import pytest
 
-# def test_add_key_char():
-#     state = State(JsonState.IN_KEY, ["aaa", "bbb", "cc"])
-#     assert not state.add_key_char("d")
-#     assert not state.add_key_char('"')
-#     assert state.current_key == ""
-#
-#     assert state.add_key_char("a")
-#     assert not state.add_key_char("b")
-#     assert state.add_key_char("a")
-#     assert state.add_key_char("a")
-#     assert not state.add_key_char("a")
-#     assert state.current_key == "aaa"
-#     assert state.add_key_char('"')
-#     assert state.keys == ["aaa"]
-#     assert state.current_key == ""
-#
-#     assert not state.add_key_char("a")
-#     assert state.add_key_char("c")
-#     assert state.add_key_char("c")
-#     assert not state.add_key_char("c")
-#     assert state.add_key_char('"')
-#     assert state.keys == ["aaa", "cc"]
-#     assert state.current_key == ""
-#
-#     # state.current_key = "aa"
-#     # assert state.add_key_char("a")
-#     # assert not state.add_key_char("b")
-#     # assert not state.add_key_char("c")
-#     # assert not state.add_key_char("d")
-#     #
-#     # state.current_key = "bbb"
-#     # assert not state.add_key_char("a")
-#     # assert not state.add_key_char("b")
-#     # assert not state.add_key_char("c")
-#     # assert not state.add_key_char("d")
+from src.state import JsonState, State
+
+
+@pytest.mark.parametrize(
+    ("depth", "steps"),
+    [
+        (
+            2,
+            [
+                ("d", False, [], ""),
+                ('"', False, [], ""),
+                ("a", True, [], "a"),
+                ("b", False, [], "a"),
+                ("a", True, [], "aa"),
+                ("a", True, [], "aaa"),
+                ("a", False, [], "aaa"),
+                ('"', True, ["aaa"], ""),
+                ("a", False, ["aaa"], ""),
+                ("c", True, ["aaa"], "c"),
+                ("c", True, ["aaa"], "cc"),
+                ("c", False, ["aaa"], "cc"),
+                ('"', True, ["aaa", "cc"], ""),
+            ],
+        ),
+        (
+            1,
+            [
+                ("d", True, [], ""),
+                ('"', True, [], ""),
+                ("a", True, [], ""),
+                ("b", True, [], ""),
+                ("a", True, [], ""),
+                ("a", True, [], ""),
+                ("a", True, [], ""),
+                ('"', True, [], ""),
+                ("a", True, [], ""),
+                ("c", True, [], ""),
+                ("c", True, [], ""),
+                ("c", True, [], ""),
+                ('"', True, [], ""),
+            ],
+        ),
+    ],
+    ids=["depth_2", "depth_1"],
+)
+def test_add_key_char(depth: int, steps: list[tuple[str, bool, list[str], str]]) -> None:
+    state = State(JsonState.IN_KEY, depth=depth, allowed_keys=["aaa", "bbb", "cc"])
+
+    for char, expected_allowed, expected_keys, expected_current_key in steps:
+        allowed, keys, current_key = state.add_key_char(char)
+
+        assert (allowed, keys, current_key) == (
+            expected_allowed,
+            expected_keys,
+            expected_current_key,
+        )
+
+        state.keys = keys
+        state.current_key = current_key

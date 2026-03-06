@@ -67,30 +67,44 @@ FUNCTION CALL: """
     '"fn_name": "fn_substitute_string_with_regex",' + \
     '"args": {"regex": "'
     print(result, end="")
-    state = State(JsonState.START, depth=0, allowed_keys=["hello"])
+    # Apply schema state of initial result
+    state = State(JsonState.START, depth=0, allowed_keys=["regex", "source_string", "replacement"],
+                  keys=["regex"], current_key="")
+    # Apply initial structure
     next_s, next_depth = decoder._simulate_structure(state.s, result, state.depth)
-    state.s = next_s
-    state.depth = next_depth
-    for _ in range(50):
+    state.s, state.depth = next_s, next_depth
+    # Apply initial schema
+    # for char in result:
+    #     _, keys, current_key = decoder._simulate_schema(state, char)
+    #     print(state)
+    #     state.keys, state.current_key = keys, current_key
+    for _ in range(100):
         ids = model.encode(prompt + result)
         logits = model.get_logits_from_input_ids(ids.tolist()[0])
-        masked_logits = logits
-        # mask = decoder.get_logit_mask(state)
-        # masked_logits = [a + b for a, b in zip(logits, mask)]
+
+        mask = decoder.get_logit_mask(state)
+        masked_logits = [a + b for a, b in zip(logits, mask)]
         max_index = masked_logits.index(max(masked_logits))
-        # print([vocabulary[i] for i, l in enumerate(masked_logits) if l != float('-inf')])
+
         token = model.decode([max_index])
         result += token
-        # print(state.s, token, max_index)
+
+        # update json structure
         next_s, next_depth = decoder._simulate_structure(state.s, token, state.depth)
         state.s = next_s
         state.depth = next_depth
+        # update json schema
+        _, keys, current_key = decoder._simulate_schema(state, token)
+        state.keys = keys
+        state.current_key = current_key
         print(token, end="", flush=True)
+        # print(keys, current_key)
         if state.s == JsonState.END:
             break
         assert state.s != JsonState.INVALID
     print("Final result: \n")
     print(result)
+    print(state)
 
 def main():
     model = Small_LLM_Model()
