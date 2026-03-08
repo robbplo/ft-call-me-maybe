@@ -3,14 +3,44 @@ from src.constrained_string_decoder import ConstrainedStringDecoder
 from src.vocabulary import Vocabulary
 from src.llm_sdk import Small_LLM_Model
 
+
 class FunctionSelector:
-    def __init__(self, model: Small_LLM_Model, vocab: Vocabulary):
+    """Selects the most appropriate function for a natural-language prompt.
+
+    Uses the LLM together with a :class:`ConstrainedStringDecoder` to perform
+    greedy constrained decoding over the set of known function names, ensuring
+    the model always produces a valid function name.
+
+    Attributes:
+        functions: Mapping from function name to its full definition.
+        model: LLM used for logit generation.
+        decoder: Constrained string decoder restricted to known function names.
+    """
+
+    def __init__(self, model: Small_LLM_Model, vocab: Vocabulary) -> None:
+        """Initialize the selector by loading function definitions.
+
+        Args:
+            model: LLM instance used for constrained generation.
+            vocab: Vocabulary shared with the rest of the pipeline.
+        """
         self.functions: dict[str, FunctionDefinition] = self._load_functions()
         self.model: Small_LLM_Model = model
         self.decoder: ConstrainedStringDecoder = ConstrainedStringDecoder(
             model, vocab, list(self.functions.keys()))
 
     def select_function(self, prompt: str) -> FunctionDefinition:
+        """Select the function that best matches *prompt*.
+
+        Runs constrained greedy decoding until exactly one function name
+        remains as a valid completion of the generated prefix.
+
+        Args:
+            prompt: Natural-language question or instruction.
+
+        Returns:
+            The :class:`FunctionDefinition` whose name was generated.
+        """
         functions = self.decoder.allowed_strings
         full_prompt = f"""
 I know these functions:
@@ -34,8 +64,11 @@ The function which applies best to the question is: """
                 break
         return self.functions[result]
 
-
     def _load_functions(self) -> dict[str, FunctionDefinition]:
+        """Load function definitions from the default input file.
+
+        Returns:
+            A dictionary mapping each function name to its definition.
+        """
         defs = FunctionDefinitions.from_file("data/input/functions_definition.json")
         return {d.fn_name: d for d in defs.root}
-

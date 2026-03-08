@@ -1,7 +1,10 @@
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
+
 class JsonState(Enum):
+    """States for the JSON finite-state machine used during constrained decoding."""
+
     START = 0
     EXPECT_VALUE = auto()
     EXPECT_KEY = auto()
@@ -13,8 +16,19 @@ class JsonState(Enum):
     INVALID = auto()
     END = auto()
 
+
 @dataclass()
 class State:
+    """Mutable decoding state tracking both JSON structure and schema constraints.
+
+    Attributes:
+        s: Current JSON parser state.
+        depth: Current nesting depth in the JSON object.
+        allowed_keys: Exhaustive list of keys permitted at depth 2.
+        keys: Keys that have already been emitted at depth 2.
+        current_key: Key string being accumulated character by character.
+    """
+
     s: JsonState
     depth: int
     allowed_keys: list[str]
@@ -22,6 +36,18 @@ class State:
     current_key: str = ""
 
     def add_key_char(self, char: str) -> tuple[bool, list[str], str]:
+        """Validate and accumulate one character of a key at depth 2.
+
+        Args:
+            char: The next character to append to the current key, or ``"``
+                to signal that the key has ended.
+
+        Returns:
+            A three-tuple ``(allowed, keys, current_key)`` where *allowed*
+            indicates whether the character is valid given the schema,
+            *keys* is the updated list of completed keys, and *current_key*
+            is the updated in-progress key string.
+        """
         # Key schema only applies to depth = 2
         if self.depth != 2 or self.s != JsonState.IN_KEY:
             return (True, self.keys, self.current_key)

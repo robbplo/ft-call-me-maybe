@@ -1,6 +1,7 @@
 import argparse
 import json
 import sys
+from typing import cast
 
 from src.function_call_generator import FunctionCallGenerator
 from src.vocabulary import Vocabulary
@@ -11,6 +12,11 @@ DEFAULT_OUTPUT = "data/output/function_calling_results.json"
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments.
+
+    Returns:
+        Parsed namespace with ``input`` and ``output`` path attributes.
+    """
     parser = argparse.ArgumentParser(description="Function calling tool using constrained decoding.")
     parser.add_argument("--input", default=DEFAULT_INPUT, help="Path to input JSON file")
     parser.add_argument("--output", default=DEFAULT_OUTPUT, help="Path to output JSON file")
@@ -18,12 +24,20 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    """Entry point: load inputs, run generation, and write results.
+
+    Reads natural-language prompts from the input JSON file, runs the
+    function-calling pipeline for each, and writes the resulting
+    :class:`~src.models.function_call.FunctionCall` objects to the output file.
+
+    Exits with status code 1 and a message on stderr for any unrecoverable error.
+    """
     args = parse_args()
 
     try:
         with open(args.input, "r") as f:
             data = json.load(f)
-        questions = [q["prompt"] for q in data]
+        questions: list[str] = [q["prompt"] for q in data]
     except FileNotFoundError:
         print(f"Error: input file not found: {args.input}", file=sys.stderr)
         sys.exit(1)
@@ -34,7 +48,7 @@ def main() -> None:
     model = Small_LLM_Model()
     try:
         with open(model.get_path_to_vocabulary_json(), "r") as f:
-            token_map = json.load(f)
+            token_map = cast(dict[str, int], json.load(f))
     except (FileNotFoundError, json.JSONDecodeError) as e:
         print(f"Error: failed to load vocabulary: {e}", file=sys.stderr)
         sys.exit(1)
