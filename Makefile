@@ -1,5 +1,5 @@
 run: 
-	uv run main.py
+	uv run python -m src
 
 test:
 	uv run pytest
