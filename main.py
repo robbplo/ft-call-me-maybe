@@ -26,15 +26,15 @@ def generate_json(model: Small_LLM_Model, decoder: ConstrainedJSONDecoder, promp
         token = model.decode([max_index])
         result += token
 
+        # update schema
+        _, keys, current_key = decoder._simulate_schema(state, token, prints=True)
+        state.keys = keys
+        state.current_key = current_key
+
         # update json structure
         next_s, next_depth = decoder._simulate_structure(state.s, token, state.depth)
         state.s = next_s
         state.depth = next_depth
-
-        # update json schema
-        _, keys, current_key = decoder._simulate_schema(state, token)
-        state.keys = keys
-        state.current_key = current_key
 
         print(token, end="", flush=True)
 
@@ -79,7 +79,7 @@ def main():
         prompt, result = build_prompt(question, function)
 
         print(question)
-        print(result)
+        print(result, end="")
 
 
         result = generate_json(model, decoder, prompt, result, function)
@@ -87,8 +87,8 @@ def main():
         function_calls.append(function_call)
 
     with open("data/output/function_calling_results.json", "w") as f:
-        json.dump(function_calls, f, indent=2)
-
+        function_call_dicts = [fc.model_dump() for fc in function_calls]
+        json.dump(function_call_dicts, f, indent=2)
 
 
 if __name__ == "__main__":

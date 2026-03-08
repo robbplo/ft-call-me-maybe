@@ -41,7 +41,7 @@ class ConstrainedJSONDecoder:
                 mask[token_id] = 0.0
         return mask
 
-    def _simulate_schema(self, state: State, token_str: str) -> tuple[bool, list[str], str]:
+    def _simulate_schema(self, state: State, token_str: str, prints = False) -> tuple[bool, list[str], str]:
         orig_s, orig_depth = state.s, state.depth
         orig_keys, orig_current_key = state.keys, state.current_key
 
@@ -51,16 +51,23 @@ class ConstrainedJSONDecoder:
         s = state.s
         depth = state.depth
 
+        check = False
+        if prints and token_str == '":':
+            check = True
         for char in token_str:
+            # if check:
+            #     print(state)
             if depth == 2:
                 match s:
                     case JsonState.IN_KEY:
                         state.s, state.depth = s, depth
                         state.keys, state.current_key = keys, current_key
                         allowed, keys, current_key = state.add_key_char(char)
+                        # if prints:
+                        #     print("char:", char, "keys:", keys, "current_key:", current_key)
                         if not allowed:
                             break
-                    case JsonState.EXPECT_COMMA_OR_END | JsonState.IN_NUMBER if char == 'f':
+                    case JsonState.EXPECT_COMMA_OR_END | JsonState.IN_NUMBER if char == '}':
                         remaining_keys = [k for k in state.allowed_keys if k not in keys]
                         if any(k not in keys for k in remaining_keys):
                             allowed = False

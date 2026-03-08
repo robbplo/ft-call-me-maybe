@@ -228,3 +228,18 @@ class TestSimulateSchemaMultiChar:
         allowed, _, current_key = multi_decoder._simulate_schema(state, ', "r')
         assert allowed is True
         assert current_key == "r"
+
+    def test_empty_keys_should_be_rejected(self):
+        """_simulate_schema should not produce empty keys"""
+        state = State(
+            s=JsonState.IN_KEY,
+            depth=2,
+            allowed_keys=["a"],
+            keys=[],
+            current_key="a",
+        )
+        # aState(s=<JsonState.IN_KEY: 5>, depth=2, allowed_keys=['a'], keys=[''], current_key='a')
+        allowed, keys, current_key = multi_decoder._simulate_schema(state, '":')
+        assert allowed is True
+        assert keys == ["a"]
+        assert current_key == ""
