@@ -1,3 +1,5 @@
+from pydantic import ValidationError
+
 from src.models.function_definition import (
     FunctionDefinition,
     FunctionDefinitions,
@@ -65,6 +67,12 @@ The function which applies best to the question is: """
             if len(substrings) == 1:
                 result = substrings[0]
                 break
+        if result not in self.functions:
+            raise ValueError(
+                f"Decoding did not converge to a valid function name; "
+                f"got {result!r}. Known functions: "
+                f"{list(self.functions.keys())}"
+            )
         return self.functions[result]
 
     def _load_functions(self) -> dict[str, FunctionDefinition]:
@@ -73,6 +81,15 @@ The function which applies best to the question is: """
         Returns:
             A dictionary mapping each function name to its definition.
         """
-        defs = FunctionDefinitions.from_file(
-            "data/input/functions_definition.json")
+        path = "data/input/functions_definition.json"
+        try:
+            defs = FunctionDefinitions.from_file(path)
+        except FileNotFoundError:
+            raise FileNotFoundError(
+                f"Function definitions file not found: {path}"
+            )
+        except (OSError, ValidationError) as e:
+            raise RuntimeError(
+                f"Failed to load function definitions from {path}: {e}"
+            ) from e
         return {d.fn_name: d for d in defs.root}

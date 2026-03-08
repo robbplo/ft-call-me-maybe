@@ -1,6 +1,7 @@
 import argparse
 import json
 import sys
+from pathlib import Path
 from typing import cast
 
 from src.function_call_generator import FunctionCallGenerator
@@ -70,6 +71,7 @@ def main() -> None:
             sys.exit(1)
 
     try:
+        Path(args.output).parent.mkdir(parents=True, exist_ok=True)
         with open(args.output, "w") as f:
             json.dump([fc.model_dump() for fc in function_calls], f, indent=2)
     except OSError as e:
