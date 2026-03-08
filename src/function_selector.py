@@ -1,4 +1,7 @@
-from src.models.function_definition import FunctionDefinition, FunctionDefinitions
+from src.models.function_definition import (
+    FunctionDefinition,
+    FunctionDefinitions,
+)
 from src.constrained_string_decoder import ConstrainedStringDecoder
 from src.vocabulary import Vocabulary
 from src.llm_sdk import Small_LLM_Model
@@ -70,5 +73,6 @@ The function which applies best to the question is: """
         Returns:
             A dictionary mapping each function name to its definition.
         """
-        defs = FunctionDefinitions.from_file("data/input/functions_definition.json")
+        defs = FunctionDefinitions.from_file(
+            "data/input/functions_definition.json")
         return {d.fn_name: d for d in defs.root}

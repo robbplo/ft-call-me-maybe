@@ -3,7 +3,7 @@ from enum import Enum, auto
 
 
 class JsonState(Enum):
-    """States for the JSON finite-state machine used during constrained decoding."""
+    """States for the JSON FSM used during constrained decoding."""
 
     START = 0
     EXPECT_VALUE = auto()
@@ -19,7 +19,7 @@ class JsonState(Enum):
 
 @dataclass()
 class State:
-    """Mutable decoding state tracking both JSON structure and schema constraints.
+    """Mutable decoding state tracking JSON structure and schema constraints.
 
     Attributes:
         s: Current JSON parser state.
@@ -52,7 +52,8 @@ class State:
         if self.depth != 2 or self.s != JsonState.IN_KEY:
             return (True, self.keys, self.current_key)
         # End key
-        remaining_keys = [key for key in self.allowed_keys if key not in self.keys]
+        remaining_keys = [
+            key for key in self.allowed_keys if key not in self.keys]
         keys = self.keys.copy()
         current_key = self.current_key
         if char == '"':
@@ -63,7 +64,10 @@ class State:
             return (allowed, keys, current_key)
         # Add char
         index = len(self.current_key)
-        remaining_keys = [key for key in remaining_keys if self.current_key == key[:index] and len(key) > index]
+        remaining_keys = [
+            key for key in remaining_keys
+            if self.current_key == key[:index] and len(key) > index
+        ]
         chars = [key[index] for key in remaining_keys]
         allowed = char in chars
         if allowed:

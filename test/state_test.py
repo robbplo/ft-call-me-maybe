@@ -45,8 +45,11 @@ from src.state import JsonState, State
     ],
     ids=["depth_2", "depth_1"],
 )
-def test_add_key_char(depth: int, steps: list[tuple[str, bool, list[str], str]]) -> None:
-    state = State(JsonState.IN_KEY, depth=depth, allowed_keys=["aaa", "bbb", "cc"])
+def test_add_key_char(
+    depth: int, steps: list[tuple[str, bool, list[str], str]]
+) -> None:
+    state = State(JsonState.IN_KEY, depth=depth,
+                  allowed_keys=["aaa", "bbb", "cc"])
 
     for char, expected_allowed, expected_keys, expected_current_key in steps:
         allowed, keys, current_key = state.add_key_char(char)

@@ -10,7 +10,7 @@ MAX_DEPTH = 2
 
 
 class Tokenizer(Protocol):
-    """Structural protocol satisfied by any object that can decode token IDs."""
+    """Protocol for objects that can decode token IDs to strings."""
 
     def decode(self, ids: list[int]) -> str:
         """Decode a sequence of token IDs into a string.
@@ -25,7 +25,7 @@ class Tokenizer(Protocol):
 
 
 class ConstrainedJSONDecoder:
-    """Token-by-token JSON decoder with structural and schema-level constraints.
+    """Token-by-token JSON decoder with structural and schema constraints.
 
     At each generation step the decoder pre-computes which tokens keep the
     output both syntactically valid (correct JSON structure) and semantically
@@ -49,8 +49,11 @@ class ConstrainedJSONDecoder:
         """
         self.model: Tokenizer = tokenizer
         self.vocab: Vocabulary = vocab
-        self.token_bytes: list[str] = [tokenizer.decode([i]) for i in range(vocab.size)]
-        self.structural_masks: dict[tuple[JsonState, int], tuple[list[float], int]] = {
+        self.token_bytes: list[str] = [
+            tokenizer.decode([i]) for i in range(vocab.size)]
+        self.structural_masks: dict[
+            tuple[JsonState, int], tuple[list[float], int]
+        ] = {
             (state, depth): self._get_structural_mask(state, depth)
             for state in JsonState
             for depth in range(MAX_DEPTH + 1)}
@@ -59,11 +62,11 @@ class ConstrainedJSONDecoder:
         """Return the combined structural and schema logit mask for *state*.
 
         Args:
-            state: Current decoding state holding JSON position and schema info.
+            state: Current decoding state (JSON position and schema).
 
         Returns:
-            A list of float offsets of length ``vocab.size``.  ``0.0`` means
-            the token is allowed; ``-inf`` means it is forbidden.
+            A list of float offsets of length ``vocab.size``.  ``0.0``
+            means the token is allowed; ``-inf`` means it is forbidden.
         """
         structural_mask, depth = self.structural_masks[state.s, state.depth]
         state.depth = depth
@@ -128,8 +131,11 @@ class ConstrainedJSONDecoder:
                         allowed, keys, current_key = state.add_key_char(char)
                         if not allowed:
                             break
-                    case JsonState.EXPECT_COMMA_OR_END | JsonState.IN_NUMBER if char == '}':
-                        remaining_keys = [k for k in state.allowed_keys if k not in keys]
+                    case (
+                        JsonState.EXPECT_COMMA_OR_END | JsonState.IN_NUMBER
+                    ) if char == '}':
+                        remaining_keys = [
+                            k for k in state.allowed_keys if k not in keys]
                         if any(k not in keys for k in remaining_keys):
                             allowed = False
                             break
@@ -159,7 +165,8 @@ class ConstrainedJSONDecoder:
         mask: list[float] = [-float('inf')] * self.vocab.size
         next_depth: int = depth
         for token_id, token_str in enumerate(self.token_bytes):
-            next_state, next_depth = self._simulate_structure(json_state, token_str, depth)
+            next_state, next_depth = self._simulate_structure(
+                json_state, token_str, depth)
             if next_state is not JsonState.INVALID:
                 mask[token_id] = 0.0
         return mask, next_depth
@@ -175,10 +182,11 @@ class ConstrainedJSONDecoder:
             depth: Starting nesting depth.
 
         Returns:
-            The resulting ``(JsonState, depth)`` after processing all characters.
+            The ``(JsonState, depth)`` tuple after processing all chars.
         """
         for char in token:
-            json_state, depth = self._simulate_structure_char(json_state, char, depth)
+            json_state, depth = self._simulate_structure_char(
+                json_state, char, depth)
         return json_state, depth
 
     def _simulate_structure_char(

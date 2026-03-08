@@ -4,7 +4,7 @@ from src.vocabulary import Vocabulary
 
 
 class Tokenizer(Protocol):
-    """Structural protocol satisfied by any object that can decode token IDs."""
+    """Protocol for objects that can decode token IDs to strings."""
 
     def decode(self, ids: list[int]) -> str:
         """Decode a sequence of token IDs into a string.
@@ -19,7 +19,7 @@ class Tokenizer(Protocol):
 
 
 class ConstrainedStringDecoder:
-    """Greedy decoder that constrains generation to a fixed set of allowed strings.
+    """Greedy decoder constraining generation to a set of allowed strings.
 
     At each step only tokens whose concatenation with the current prefix
     remains a valid prefix of at least one allowed string are assigned a
@@ -40,7 +40,7 @@ class ConstrainedStringDecoder:
         vocab: Vocabulary,
         allowed_strings: list[str],
     ) -> None:
-        """Initialize the decoder with a tokenizer, vocabulary, and allowed strings.
+        """Initialize the decoder with a tokenizer, vocab, and allowed strings.
 
         Args:
             tokenizer: Tokenizer used to decode token IDs to strings.
@@ -51,7 +51,8 @@ class ConstrainedStringDecoder:
             ValueError: If *allowed_strings* is empty.
         """
         if not allowed_strings:
-            raise ValueError("allowed_strings must contain at least one value.")
+            raise ValueError(
+                "allowed_strings must contain at least one value.")
 
         self.model: Tokenizer = tokenizer
         self.vocab: Vocabulary = vocab
@@ -61,7 +62,8 @@ class ConstrainedStringDecoder:
             for allowed in self.allowed_strings
             for index in range(len(allowed) + 1)
         }
-        self.token_bytes: list[str] = [tokenizer.decode([i]) for i in range(vocab.size)]
+        self.token_bytes: list[str] = [
+            tokenizer.decode([i]) for i in range(vocab.size)]
 
     def get_logit_mask(self, value: str) -> list[float]:
         """Compute the additive logit mask for the current generation prefix.

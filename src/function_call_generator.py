@@ -1,3 +1,5 @@
+from typing import cast
+
 from src.models.function_definition import FunctionDefinition
 from src.models.function_call import FunctionCall
 from src.function_selector import FunctionSelector
@@ -17,7 +19,7 @@ class FunctionCallGenerator:
     Attributes:
         model: LLM used for encoding, logit generation, and decoding.
         vocab: Vocabulary shared across all decoders.
-        decoder: Constrained JSON decoder enforcing structural and schema validity.
+        decoder: Constrained JSON decoder enforcing structural and schema.
         function_selector: Component responsible for function name selection.
     """
 
@@ -30,17 +32,19 @@ class FunctionCallGenerator:
         """
         self.model: Small_LLM_Model = model
         self.vocab: Vocabulary = vocab
-        self.decoder: ConstrainedJSONDecoder = ConstrainedJSONDecoder(model, vocab)
-        self.function_selector: FunctionSelector = FunctionSelector(model, vocab)
+        self.decoder: ConstrainedJSONDecoder = ConstrainedJSONDecoder(
+            model, vocab)
+        self.function_selector: FunctionSelector = FunctionSelector(
+            model, vocab)
 
     def generate(self, question: str) -> FunctionCall:
-        """Translate a natural-language question into a structured function call.
+        """Translate a natural-language question into a function call.
 
         Args:
             question: The natural-language prompt to process.
 
         Returns:
-            A validated :class:`~src.models.function_call.FunctionCall` instance.
+            A validated :class:`~src.models.function_call.FunctionCall`.
         """
         function = self.function_selector.select_function(question)
         prompt, result = self._build_prompt(question, function)
@@ -49,9 +53,11 @@ class FunctionCallGenerator:
         print(result, end="")
 
         result = self._generate_json(prompt, result, function)
-        return FunctionCall.model_validate_json(result)
+        return cast(FunctionCall, FunctionCall.model_validate_json(result))
 
-    def _build_prompt(self, question: str, function: FunctionDefinition) -> tuple[str, str]:
+    def _build_prompt(
+        self, question: str, function: FunctionDefinition
+    ) -> tuple[str, str]:
         """Build the LLM prompt and the pre-filled JSON prefix.
 
         Args:
@@ -76,7 +82,9 @@ class FunctionCallGenerator:
         )
         return prompt, initial_result
 
-    def _generate_json(self, prompt: str, result: str, function: FunctionDefinition) -> str:
+    def _generate_json(
+        self, prompt: str, result: str, function: FunctionDefinition
+    ) -> str:
         """Run constrained greedy decoding to complete the JSON string.
 
         Continues token-by-token generation from *result* until the JSON FSM
@@ -85,14 +93,18 @@ class FunctionCallGenerator:
         Args:
             prompt: Full LLM prompt (used as context for logit generation).
             result: Partial JSON string to continue from.
-            function: Function definition whose argument names constrain the schema.
+            function: Function definition whose arg names constrain schema.
 
         Returns:
             The completed JSON string.
         """
-        state = State(JsonState.START, depth=0, allowed_keys=function.args_names,
-                      keys=[""], current_key="")
-        next_s, next_depth = self.decoder._simulate_structure(state.s, result, state.depth)
+        state = State(
+            JsonState.START, depth=0,
+            allowed_keys=function.args_names,
+            keys=[""], current_key="",
+        )
+        next_s, next_depth = self.decoder._simulate_structure(
+            state.s, result, state.depth)
         state.s, state.depth = next_s, next_depth
 
         for _ in range(100):
@@ -106,11 +118,13 @@ class FunctionCallGenerator:
             token = self.model.decode([max_index])
             result += token
 
-            _, keys, current_key = self.decoder._simulate_schema(state, token, prints=True)
+            _, keys, current_key = self.decoder._simulate_schema(
+                state, token, prints=True)
             state.keys = keys
             state.current_key = current_key
 
-            next_s, next_depth = self.decoder._simulate_structure(state.s, token, state.depth)
+            next_s, next_depth = self.decoder._simulate_structure(
+                state.s, token, state.depth)
             state.s = next_s
             state.depth = next_depth
 

@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class FunctionCall(BaseModel):
-    """Pydantic model representing the structured output of the function calling pipeline.
+    """Pydantic model for the structured output of the function pipeline.
 
     Attributes:
         prompt: The original natural-language request.

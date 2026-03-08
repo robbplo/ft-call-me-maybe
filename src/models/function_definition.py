@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 from pydantic import BaseModel, Field, RootModel, model_validator
 
@@ -41,16 +41,19 @@ class FunctionDefinition(BaseModel):
 
 
 class FunctionDefinitions(RootModel[list[FunctionDefinition]]):
-    """Pydantic root model wrapping a list of :class:`FunctionDefinition` objects."""
+    """Pydantic root model wrapping a list of :class:`FunctionDefinition`."""
 
     @classmethod
     def from_file(cls, path: str | Path) -> FunctionDefinitions:
         """Load and validate function definitions from a JSON file.
 
         Args:
-            path: Path to the JSON file containing an array of function definitions.
+            path: Path to the JSON file with an array of function definitions.
 
         Returns:
             A :class:`FunctionDefinitions` instance populated from the file.
         """
-        return cls.model_validate_json(Path(path).read_text(encoding="utf-8"))
+        return cast(
+            FunctionDefinitions,
+            cls.model_validate_json(Path(path).read_text(encoding="utf-8"))
+        )

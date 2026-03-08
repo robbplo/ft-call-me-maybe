@@ -17,9 +17,12 @@ def parse_args() -> argparse.Namespace:
     Returns:
         Parsed namespace with ``input`` and ``output`` path attributes.
     """
-    parser = argparse.ArgumentParser(description="Function calling tool using constrained decoding.")
-    parser.add_argument("--input", default=DEFAULT_INPUT, help="Path to input JSON file")
-    parser.add_argument("--output", default=DEFAULT_OUTPUT, help="Path to output JSON file")
+    parser = argparse.ArgumentParser(
+        description="Function calling tool using constrained decoding.")
+    parser.add_argument("--input", default=DEFAULT_INPUT,
+                        help="Path to input JSON file")
+    parser.add_argument("--output", default=DEFAULT_OUTPUT,
+                        help="Path to output JSON file")
     return parser.parse_args()
 
 
@@ -30,7 +33,8 @@ def main() -> None:
     function-calling pipeline for each, and writes the resulting
     :class:`~src.models.function_call.FunctionCall` objects to the output file.
 
-    Exits with status code 1 and a message on stderr for any unrecoverable error.
+    Exits with status code 1 and a message on stderr for any
+    unrecoverable error.
     """
     args = parse_args()
 
@@ -61,7 +65,8 @@ def main() -> None:
         try:
             function_calls.append(generator.generate(question))
         except Exception as e:
-            print(f"\nError processing prompt '{question}': {e}", file=sys.stderr)
+            msg = f"\nError processing prompt '{question}': {e}"
+            print(msg, file=sys.stderr)
             sys.exit(1)
 
     try:
