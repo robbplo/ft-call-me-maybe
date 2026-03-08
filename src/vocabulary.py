@@ -1,6 +1,6 @@
 import json
 from typing import cast
-from llm_sdk import Small_LLM_Model
+from src.llm_sdk import Small_LLM_Model
 
 
 class Vocabulary:

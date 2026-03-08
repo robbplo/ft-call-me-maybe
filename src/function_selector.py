@@ -1,7 +1,7 @@
-from src.function import FunctionDefinition, FunctionDefinitions
+from src.models.function_definition import FunctionDefinition, FunctionDefinitions
 from src.constrained_string_decoder import ConstrainedStringDecoder
 from src.vocabulary import Vocabulary
-from llm_sdk import Small_LLM_Model
+from src.llm_sdk import Small_LLM_Model
 
 class FunctionSelector:
     def __init__(self, model: Small_LLM_Model, vocab: Vocabulary):

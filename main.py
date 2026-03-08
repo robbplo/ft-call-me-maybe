@@ -1,33 +1,17 @@
-from src.function import FunctionDefinition
+from src.models.function_definition import FunctionDefinition
+from src.models.function_call import FunctionCall
 from src.function_selector import FunctionSelector
 from src.constrained_string_decoder import ConstrainedStringDecoder
 from src.constrained_decoder import ConstrainedJSONDecoder, JsonState, State
 from src.vocabulary import Vocabulary
-from llm_sdk import Small_LLM_Model
+from src.llm_sdk import Small_LLM_Model
 import json
 
 
-def generate_json(model: Small_LLM_Model, vocabulary: Vocabulary):
-    decoder = ConstrainedJSONDecoder(model, vocabulary)
-
-    question = "Replace all vowels in 'Programming is fun' with asterisks"
-    prompt = f"""
-PROMPT: {question}
-ARGUMENTS: 
-- regex
-- source_string
-- replacement
-FUNCTION CALL: """
-    print(prompt)
-
-    result = '{' + \
-    f'"prompt": "{question}",' + \
-    '"fn_name": "fn_substitute_string_with_regex",' + \
-    '"args": {"regex": "'
-    print(result, end="")
+def generate_json(model: Small_LLM_Model, decoder: ConstrainedJSONDecoder, prompt: str, result: str, function: FunctionDefinition):
     # Apply schema state of initial result
-    state = State(JsonState.START, depth=0, allowed_keys=["regex", "source_string", "replacement"],
-                  keys=["regex"], current_key="")
+    state = State(JsonState.START, depth=0, allowed_keys=function.args_names,
+                  keys=[""], current_key="")
     # Apply initial structure
     next_s, next_depth = decoder._simulate_structure(state.s, result, state.depth)
     state.s, state.depth = next_s, next_depth
@@ -57,9 +41,7 @@ FUNCTION CALL: """
         if state.s == JsonState.END:
             break
         assert state.s != JsonState.INVALID
-    print("Final result: \n")
-    print(result)
-    print(state)
+    return result
 
 def load_token_map(vocab_path) -> dict[str, int]:
     with open(vocab_path, "r") as f:
@@ -70,15 +52,12 @@ def build_prompt(question: str, function: FunctionDefinition) -> tuple[str, str]
     prompt = f"""PROMPT: {question}
     ARGUMENTS: 
     - {'- \n'.join(function.args_names)}
-    - regex
-    - source_string
-    - replacement
     FUNCTION CALL: """
 
     initial_result = '{' + \
     f'"prompt": "{question}",' + \
-    '"fn_name": "fn_substitute_string_with_regex",' + \
-    '"args": {"regex": "'
+    f'"fn_name": "{function.fn_name}",' + \
+    '"args": {'
     return prompt, initial_result
 
 def main():
@@ -87,13 +66,29 @@ def main():
     vocab = Vocabulary(token_map)
     function_selector = FunctionSelector(model, vocab)
 
-    question = "What is the square root of 25?"
-    function = function_selector.select_function(question)
+    questions = []
+    with open("data/input/function_calling_tests.json", "r") as f:
+        questions = [q["prompt"] for q in json.load(f)]
 
-    print(question)
+
+    function_calls = []
+
+    decoder = ConstrainedJSONDecoder(model, vocab)
+    for question in questions:
+        function = function_selector.select_function(question)
+        prompt, result = build_prompt(question, function)
+
+        print(question)
+        print(result)
 
 
-    # generate_json(model, vocabulary)
+        result = generate_json(model, decoder, prompt, result, function)
+        function_call = FunctionCall.model_validate_json(result)
+        function_calls.append(function_call)
+
+    with open("data/output/function_calling_results.json", "w") as f:
+        json.dump(function_calls, f, indent=2)
+
 
 
 if __name__ == "__main__":
