@@ -92,4 +92,8 @@ The function which applies best to the question is: """
             raise RuntimeError(
                 f"Failed to load function definitions from {path}: {e}"
             ) from e
+        if len(defs.root) == 0:
+            raise RuntimeError(
+                f"Function definitions file {path} is empty"
+            )
         return {d.fn_name: d for d in defs.root}

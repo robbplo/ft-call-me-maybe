@@ -59,7 +59,11 @@ def main() -> None:
         sys.exit(1)
 
     vocab = Vocabulary(token_map)
-    generator = FunctionCallGenerator(model, vocab)
+    try:
+        generator = FunctionCallGenerator(model, vocab)
+    except (RuntimeError, ValueError) as e:
+        print(f"Error: failed to initialize generator: {e}", file=sys.stderr)
+        sys.exit(1)
 
     function_calls = []
     for question in questions:
