@@ -104,9 +104,9 @@ class FunctionCallGenerator:
             allowed_types=function.args_types,
             keys=[], current_key="",
         )
-        next_s, next_depth = self.decoder._simulate_structure(
-            state.s, result, state.depth)
-        state.s, state.depth = next_s, next_depth
+        allowed, state = self.decoder.advance_state(state, result)
+        if not allowed:
+            raise ValueError("Initial JSON prefix violates decoder constraints.")
 
         for _ in range(100):
             ids = self.model.encode(prompt + result)
@@ -119,23 +119,8 @@ class FunctionCallGenerator:
             token = self.model.decode([max_index])
             result += token
 
-            (
-                _,
-                keys,
-                current_key,
-                current_value_key,
-                current_value_buffer,
-            ) = self.decoder._simulate_schema(
-                state, token, prints=True)
-            state.keys = keys
-            state.current_key = current_key
-            state.current_value_key = current_value_key
-            state.current_value_buffer = current_value_buffer
-
-            next_s, next_depth = self.decoder._simulate_structure(
-                state.s, token, state.depth)
-            state.s = next_s
-            state.depth = next_depth
+            allowed, state = self.decoder.advance_state(state, token)
+            assert allowed
 
             print(token, end="", flush=True)
 

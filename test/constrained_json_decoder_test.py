@@ -54,6 +54,7 @@ decoder = _make_decoder(["a", "b", "c"])
         (JsonState.EXPECT_VALUE, 1, "1", JsonState.IN_NUMBER, 1),
         (JsonState.EXPECT_VALUE, 1, '"', JsonState.IN_STRING, 1),
         (JsonState.EXPECT_VALUE, 1, "{", JsonState.EXPECT_KEY, 2),
+        (JsonState.EXPECT_VALUE, 2, "{", JsonState.INVALID, 2),
         (JsonState.EXPECT_VALUE, 1, "t", JsonState.IN_TRUE_T, 1),
         (JsonState.EXPECT_VALUE, 1, "f", JsonState.IN_FALSE_F, 1),
         (JsonState.NUMBER_AFTER_MINUS, 1, "0", JsonState.IN_NUMBER_ZERO, 1),
@@ -217,15 +218,13 @@ class TestSimulateSchemaMultiChar:
             current_key="",
         )
 
-        allowed, keys, current_key, current_value_key, current_value_buffer = (
-            multi_decoder._simulate_schema(state, '1, "r')
-        )
+        allowed, next_state = multi_decoder.advance_state(state, '1, "r')
 
         assert allowed is True
-        assert keys == []
-        assert current_key == "r"
-        assert current_value_key is None
-        assert current_value_buffer == ""
+        assert next_state.keys == []
+        assert next_state.current_key == "r"
+        assert next_state.current_value_key is None
+        assert next_state.current_value_buffer == ""
 
     def test_multi_char_token_rejects_invalid_key_prefix(self) -> None:
         state = State(
@@ -236,7 +235,7 @@ class TestSimulateSchemaMultiChar:
             current_key="",
         )
 
-        allowed, _, _, _, _ = multi_decoder._simulate_schema(state, '1, "a')
+        allowed, _ = multi_decoder.advance_state(state, '1, "a')
 
         assert allowed is False
 
@@ -249,11 +248,10 @@ class TestSimulateSchemaMultiChar:
             current_key="",
         )
 
-        allowed, _, current_key, _, _ = multi_decoder._simulate_schema(
-            state, '1, "a')
+        allowed, next_state = multi_decoder.advance_state(state, '1, "a')
 
         assert allowed is True
-        assert current_key == "a"
+        assert next_state.current_key == "a"
 
     def test_closing_brace_blocked_when_required_keys_missing(self) -> None:
         state = State(
@@ -264,7 +262,7 @@ class TestSimulateSchemaMultiChar:
             current_key="",
         )
 
-        allowed, _, _, _, _ = multi_decoder._simulate_schema(state, "1}")
+        allowed, _ = multi_decoder.advance_state(state, "1}")
 
         assert allowed is False
 
@@ -277,9 +275,11 @@ class TestSimulateSchemaMultiChar:
             current_key="",
         )
 
-        allowed, _, _, _, _ = multi_decoder._simulate_schema(state, "1}")
+        allowed, next_state = multi_decoder.advance_state(state, "1}")
 
         assert allowed is True
+        assert next_state.depth == 1
+        assert next_state.s == JsonState.EXPECT_COMMA_OR_END
 
     def test_closing_brace_from_expect_comma_or_end(self) -> None:
         state = State(
@@ -290,11 +290,11 @@ class TestSimulateSchemaMultiChar:
             current_key="",
         )
 
-        allowed, _, _, _, _ = multi_decoder._simulate_schema(state, "}")
+        allowed, _ = multi_decoder.advance_state(state, "}")
 
         assert allowed is False
 
-    def test_state_not_mutated_after_simulate(self) -> None:
+    def test_state_not_mutated_after_advance(self) -> None:
         state = State(
             s=JsonState.IN_NUMBER,
             depth=2,
@@ -306,7 +306,7 @@ class TestSimulateSchemaMultiChar:
             current_value_buffer="1",
         )
 
-        multi_decoder._simulate_schema(state, '1, "r')
+        multi_decoder.advance_state(state, '1, "r')
 
         assert state.s == JsonState.IN_NUMBER
         assert state.depth == 2
@@ -324,11 +324,10 @@ class TestSimulateSchemaMultiChar:
             current_key="",
         )
 
-        allowed, _, current_key, _, _ = multi_decoder._simulate_schema(
-            state, ', "r')
+        allowed, next_state = multi_decoder.advance_state(state, ', "r')
 
         assert allowed is True
-        assert current_key == "r"
+        assert next_state.current_key == "r"
 
     def test_key_close_sets_current_value_key(self) -> None:
         state = State(
@@ -340,15 +339,13 @@ class TestSimulateSchemaMultiChar:
             current_key="a",
         )
 
-        allowed, keys, current_key, current_value_key, current_value_buffer = (
-            multi_decoder._simulate_schema(state, '":')
-        )
+        allowed, next_state = multi_decoder.advance_state(state, '":')
 
         assert allowed is True
-        assert keys == ["a"]
-        assert current_key == ""
-        assert current_value_key == "a"
-        assert current_value_buffer == ""
+        assert next_state.keys == ["a"]
+        assert next_state.current_key == ""
+        assert next_state.current_value_key == "a"
+        assert next_state.current_value_buffer == ""
 
 
 typed_decoder = _make_decoder(["x"])
@@ -364,7 +361,7 @@ def test_string_value_must_start_with_quote() -> None:
         current_value_key="name",
     )
 
-    allowed, _, _, _, _ = typed_decoder._simulate_schema(state, "1")
+    allowed, _ = typed_decoder.advance_state(state, "1")
 
     assert allowed is False
 
@@ -379,13 +376,11 @@ def test_string_value_completion_clears_current_value_key() -> None:
         current_value_key="name",
     )
 
-    allowed, _, _, current_value_key, current_value_buffer = (
-        typed_decoder._simulate_schema(state, '"ok"')
-    )
+    allowed, next_state = typed_decoder.advance_state(state, '"ok"')
 
     assert allowed is True
-    assert current_value_key is None
-    assert current_value_buffer == ""
+    assert next_state.current_value_key is None
+    assert next_state.current_value_buffer == ""
 
 
 def test_int_value_rejects_decimal_suffix() -> None:
@@ -399,7 +394,7 @@ def test_int_value_rejects_decimal_suffix() -> None:
         current_value_buffer="1",
     )
 
-    allowed, _, _, _, _ = typed_decoder._simulate_schema(state, ".")
+    allowed, _ = typed_decoder.advance_state(state, ".")
 
     assert allowed is False
 
@@ -415,13 +410,11 @@ def test_float_value_accepts_exponent_prefix() -> None:
         current_value_buffer="1",
     )
 
-    allowed, _, _, current_value_key, current_value_buffer = (
-        typed_decoder._simulate_schema(state, "e+2")
-    )
+    allowed, next_state = typed_decoder.advance_state(state, "e+2")
 
     assert allowed is True
-    assert current_value_key == "n"
-    assert current_value_buffer == "1e+2"
+    assert next_state.current_value_key == "n"
+    assert next_state.current_value_buffer == "1e+2"
 
 
 def test_bool_value_accepts_split_prefix_and_completion() -> None:
@@ -435,13 +428,11 @@ def test_bool_value_accepts_split_prefix_and_completion() -> None:
         current_value_buffer="t",
     )
 
-    allowed, _, _, current_value_key, current_value_buffer = (
-        typed_decoder._simulate_schema(state, "rue")
-    )
+    allowed, next_state = typed_decoder.advance_state(state, "rue")
 
     assert allowed is True
-    assert current_value_key is None
-    assert current_value_buffer == ""
+    assert next_state.current_value_key is None
+    assert next_state.current_value_buffer == ""
 
 
 def test_mixed_keys_switch_value_type_in_one_token() -> None:
@@ -455,12 +446,28 @@ def test_mixed_keys_switch_value_type_in_one_token() -> None:
         current_value_buffer="1",
     )
 
-    allowed, keys, current_key, current_value_key, current_value_buffer = (
-        typed_decoder._simulate_schema(state, ', "b": f')
+    allowed, next_state = typed_decoder.advance_state(state, ', "b": f')
+
+    assert allowed is True
+    assert next_state.keys == ["a", "b"]
+    assert next_state.current_key == ""
+    assert next_state.current_value_key == "b"
+    assert next_state.current_value_buffer == "f"
+
+
+def test_advance_state_primes_existing_generator_prefix() -> None:
+    state = State(
+        s=JsonState.START,
+        depth=0,
+        allowed_keys=["arg"],
+        allowed_types={"arg": "int"},
+    )
+
+    allowed, next_state = typed_decoder.advance_state(
+        state,
+        '{"prompt": "Q","fn_name": "f","args": {',
     )
 
     assert allowed is True
-    assert keys == ["a", "b"]
-    assert current_key == ""
-    assert current_value_key == "b"
-    assert current_value_buffer == "f"
+    assert next_state.s == JsonState.EXPECT_KEY
+    assert next_state.depth == 2

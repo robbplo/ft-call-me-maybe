@@ -1,5 +1,9 @@
-from typing import Protocol
-
+from .common import (
+    MASK_ALLOWED,
+    Tokenizer,
+    build_token_mask,
+    decode_vocab_tokens,
+)
 from .state import JsonState, State
 from src.vocabulary import Vocabulary
 
@@ -33,14 +37,15 @@ BOOLEAN_STATES = {
     JsonState.IN_FALSE_FAL,
     JsonState.IN_FALSE_FALS,
 }
-
-
-class Tokenizer(Protocol):
-    """Protocol for objects that can decode token IDs to strings."""
-
-    def decode(self, ids: list[int]) -> str:
-        """Decode a sequence of token IDs to a string."""
-        ...
+LITERAL_TRANSITIONS = {
+    JsonState.IN_TRUE_T: ("r", JsonState.IN_TRUE_TR),
+    JsonState.IN_TRUE_TR: ("u", JsonState.IN_TRUE_TRU),
+    JsonState.IN_TRUE_TRU: ("e", JsonState.EXPECT_COMMA_OR_END),
+    JsonState.IN_FALSE_F: ("a", JsonState.IN_FALSE_FA),
+    JsonState.IN_FALSE_FA: ("l", JsonState.IN_FALSE_FAL),
+    JsonState.IN_FALSE_FAL: ("s", JsonState.IN_FALSE_FALS),
+    JsonState.IN_FALSE_FALS: ("e", JsonState.EXPECT_COMMA_OR_END),
+}
 
 
 class ConstrainedJSONDecoder:
@@ -48,10 +53,8 @@ class ConstrainedJSONDecoder:
 
     def __init__(self, tokenizer: Tokenizer, vocab: Vocabulary) -> None:
         """Initialize the decoder and pre-compute structural masks."""
-        self.model: Tokenizer = tokenizer
         self.vocab: Vocabulary = vocab
-        self.token_bytes: list[str] = [
-            tokenizer.decode([i]) for i in range(vocab.size)]
+        self.token_bytes: list[str] = decode_vocab_tokens(tokenizer, vocab)
         self.structural_masks: dict[tuple[JsonState, int], list[float]] = {
             (state, depth): self._get_structural_mask(state, depth)
             for state in JsonState
@@ -67,229 +70,149 @@ class ConstrainedJSONDecoder:
     def _get_schema_mask(self, state: State) -> list[float]:
         """Compute the schema-level logit mask for depth-2 args decoding."""
         if state.depth != 2:
-            return [0.0] * self.vocab.size
+            return [MASK_ALLOWED] * self.vocab.size
 
-        mask: list[float] = [-float("inf")] * self.vocab.size
-        for token_id, token_str in enumerate(self.token_bytes):
-            allowed, _, _, _, _ = self._simulate_schema(state, token_str)
-            if allowed:
-                mask[token_id] = 0.0
-        return mask
-
-    def _simulate_schema(
-        self, state: State, token_str: str, prints: bool = False
-    ) -> tuple[bool, list[str], str, str | None, str]:
-        """Simulate appending *token_str* and check schema validity."""
-        del prints
-
-        orig_s, orig_depth = state.s, state.depth
-        orig_keys, orig_current_key = state.keys, state.current_key
-        orig_current_value_key = state.current_value_key
-        orig_current_value_buffer = state.current_value_buffer
-
-        allowed = True
-        keys = state.keys.copy()
-        current_key = state.current_key
-        current_value_key = state.current_value_key
-        current_value_buffer = state.current_value_buffer
-        s = state.s
-        depth = state.depth
-
-        for char in token_str:
-            if depth == 2:
-                (
-                    allowed,
-                    keys,
-                    current_key,
-                    current_value_key,
-                    current_value_buffer,
-                ) = self._simulate_schema_char(
-                    state,
-                    s,
-                    depth,
-                    char,
-                    keys,
-                    current_key,
-                    current_value_key,
-                    current_value_buffer,
-                )
-                if not allowed:
-                    break
-
-            s, depth = self._simulate_structure_char(s, char, depth)
-            if s == JsonState.INVALID:
-                allowed = False
-                break
-
-        state.s, state.depth = orig_s, orig_depth
-        state.keys, state.current_key = orig_keys, orig_current_key
-        state.current_value_key = orig_current_value_key
-        state.current_value_buffer = orig_current_value_buffer
-        return (
-            allowed,
-            keys,
-            current_key,
-            current_value_key,
-            current_value_buffer,
+        return build_token_mask(
+            self.token_bytes,
+            lambda token_str: self.advance_state(state, token_str)[0],
         )
 
-    def _simulate_schema_char(
-        self,
-        state: State,
-        json_state: JsonState,
-        depth: int,
-        char: str,
-        keys: list[str],
-        current_key: str,
-        current_value_key: str | None,
-        current_value_buffer: str,
-    ) -> tuple[bool, list[str], str, str | None, str]:
-        """Simulate one schema-relevant character at depth 2."""
-        state.s = json_state
-        state.depth = depth
-        state.keys = keys
-        state.current_key = current_key
-        state.current_value_key = current_value_key
-        state.current_value_buffer = current_value_buffer
+    def advance_state(self, state: State, text: str) -> tuple[bool, State]:
+        """Return whether *text* is valid and the resulting copied state."""
+        next_state = state.copy()
 
-        if json_state == JsonState.IN_KEY:
-            allowed, keys, current_key, current_value_key = state.add_key_char(
-                char)
-            return (
-                allowed,
-                keys,
-                current_key,
-                current_value_key,
-                current_value_buffer,
+        for char in text:
+            previous_depth = next_state.depth
+            if next_state.depth == 2 and not self._advance_schema_char(
+                next_state, char
+            ):
+                return False, next_state
+
+            next_state.s, next_state.depth = self._simulate_structure_char(
+                next_state.s,
+                char,
+                next_state.depth,
             )
+            if next_state.s == JsonState.INVALID:
+                return False, next_state
+            if (
+                previous_depth == 2
+                and char == "}"
+                and next_state.depth == 1
+                and next_state.remaining_keys()
+            ):
+                return False, next_state
 
-        allowed, current_value_key, current_value_buffer = (
-            self._consume_value_char(state, json_state, char)
-        )
-        if not allowed:
-            return (
-                False,
-                keys,
-                current_key,
-                current_value_key,
-                current_value_buffer,
+        return True, next_state
+
+    def _advance_schema_char(self, state: State, char: str) -> bool:
+        """Apply depth-2 schema tracking for one character."""
+        if state.s == JsonState.IN_KEY:
+            allowed, state.keys, state.current_key, state.current_value_key = (
+                state.add_key_char(char)
             )
+            return allowed
 
-        if self._is_depth_2_object_close(json_state, char):
-            if state.remaining_keys(keys):
-                return (
-                    False,
-                    keys,
-                    current_key,
-                    current_value_key,
-                    current_value_buffer,
-                )
-
-        return (
-            True,
-            keys,
-            current_key,
-            current_value_key,
-            current_value_buffer,
-        )
+        return self._consume_value_char(state, char)
 
     def _consume_value_char(
-        self, state: State, json_state: JsonState, char: str
-    ) -> tuple[bool, str | None, str]:
+        self, state: State, char: str
+    ) -> bool:
         """Validate a character against the active depth-2 value type."""
-        current_value_key = state.current_value_key
-        current_value_buffer = state.current_value_buffer
+        if state.current_value_key is None:
+            return True
 
-        if current_value_key is None:
-            return True, current_value_key, current_value_buffer
-
-        value_type = state.allowed_types.get(current_value_key)
+        value_type = state.allowed_types.get(state.current_value_key)
         if value_type is None:
-            return False, current_value_key, current_value_buffer
+            return False
 
-        if json_state == JsonState.EXPECT_COLON:
-            return True, current_value_key, current_value_buffer
+        if state.s == JsonState.EXPECT_COLON:
+            return True
 
-        if json_state == JsonState.EXPECT_VALUE:
+        if state.s == JsonState.EXPECT_VALUE:
             if char in WHITESPACE:
-                return True, current_value_key, current_value_buffer
-            return self._start_typed_value(value_type, char, current_value_key)
+                return True
+            return self._start_typed_value(state, value_type, char)
 
-        if json_state == JsonState.IN_STRING:
+        if state.s == JsonState.IN_STRING:
             if value_type != "str":
-                return False, current_value_key, current_value_buffer
-            current_value_buffer += char
-            if len(current_value_buffer) > 1 and current_value_buffer[-1] == '"':
-                return True, None, ""
-            return True, current_value_key, current_value_buffer
+                return False
+            state.current_value_buffer += char
+            if (
+                len(state.current_value_buffer) > 1
+                and state.current_value_buffer[-1] == '"'
+            ):
+                state.current_value_key = None
+                state.current_value_buffer = ""
+            return True
 
-        if json_state in BOOLEAN_STATES:
+        if state.s in BOOLEAN_STATES:
             if value_type != "bool":
-                return False, current_value_key, current_value_buffer
-            current_value_buffer += char
+                return False
+            state.current_value_buffer += char
             if not any(
-                literal.startswith(current_value_buffer)
+                literal.startswith(state.current_value_buffer)
                 for literal in ("true", "false")
             ):
-                return False, current_value_key, current_value_buffer
-            if current_value_buffer in {"true", "false"}:
-                return True, None, ""
-            return True, current_value_key, current_value_buffer
+                return False
+            if state.current_value_buffer in {"true", "false"}:
+                state.current_value_key = None
+                state.current_value_buffer = ""
+            return True
 
-        if json_state in NUMBER_STATES:
+        if state.s in NUMBER_STATES:
             if value_type not in {"int", "float"}:
-                return False, current_value_key, current_value_buffer
+                return False
             return self._consume_numeric_char(
+                state,
                 value_type,
-                json_state,
                 char,
-                current_value_key,
-                current_value_buffer,
             )
 
-        return True, current_value_key, current_value_buffer
+        return True
 
     def _start_typed_value(
-        self, value_type: str, char: str, current_value_key: str
-    ) -> tuple[bool, str | None, str]:
+        self, state: State, value_type: str, char: str
+    ) -> bool:
         """Validate the first non-whitespace character of a typed value."""
         match value_type:
             case "str":
                 if char != '"':
-                    return False, current_value_key, ""
+                    return False
             case "bool":
                 if char not in {"t", "f"}:
-                    return False, current_value_key, ""
+                    return False
             case "int" | "float":
                 if char not in DIGITS | {"-"}:
-                    return False, current_value_key, ""
+                    return False
             case _:
-                return False, current_value_key, ""
-        return True, current_value_key, char
+                return False
+        state.current_value_buffer = char
+        return True
 
     def _consume_numeric_char(
         self,
+        state: State,
         value_type: str,
-        json_state: JsonState,
         char: str,
-        current_value_key: str,
-        current_value_buffer: str,
-    ) -> tuple[bool, str | None, str]:
+    ) -> bool:
         """Validate a numeric character or numeric delimiter."""
         if char in WHITESPACE or char in {",", "}"}:
-            if json_state not in COMPLETE_NUMBER_STATES:
-                return False, current_value_key, current_value_buffer
+            if state.s not in COMPLETE_NUMBER_STATES:
+                return False
             if value_type == "int" and not self._is_integer_number(
-                current_value_buffer
+                state.current_value_buffer
             ):
-                return False, current_value_key, current_value_buffer
-            return True, None, ""
+                return False
+            state.current_value_key = None
+            state.current_value_buffer = ""
+            return True
 
         if value_type == "int" and char in {".", "e", "E"}:
-            return False, current_value_key, current_value_buffer
+            return False
 
-        current_value_buffer += char
-        return True, current_value_key, current_value_buffer
+        state.current_value_buffer += char
+        return True
 
     def _is_integer_number(self, value: str) -> bool:
         """Return whether the current number prefix is integer-only."""
@@ -301,26 +224,19 @@ class ConstrainedJSONDecoder:
             and "E" not in value
         )
 
-    def _is_depth_2_object_close(
-        self, json_state: JsonState, char: str
-    ) -> bool:
-        """Return whether *char* can close the depth-2 args object."""
-        return char == "}" and (
-            json_state == JsonState.EXPECT_COMMA_OR_END
-            or json_state in COMPLETE_NUMBER_STATES
-        )
-
     def _get_structural_mask(
         self, json_state: JsonState, depth: int
     ) -> list[float]:
         """Pre-compute the structural logit mask for a given state and depth."""
-        mask: list[float] = [-float("inf")] * self.vocab.size
-        for token_id, token_str in enumerate(self.token_bytes):
-            next_state, _ = self._simulate_structure(
-                json_state, token_str, depth)
-            if next_state is not JsonState.INVALID:
-                mask[token_id] = 0.0
-        return mask
+        return build_token_mask(
+            self.token_bytes,
+            lambda token_str: self._simulate_structure(
+                json_state,
+                token_str,
+                depth,
+            )[0]
+            is not JsonState.INVALID,
+        )
 
     def _simulate_structure(
         self, json_state: JsonState, token: str, depth: int
@@ -335,226 +251,192 @@ class ConstrainedJSONDecoder:
         self, json_state: JsonState, char: str, depth: int
     ) -> tuple[JsonState, int]:
         """Advance the JSON structural FSM by one character."""
-        next_state = json_state
         match json_state:
             case JsonState.INVALID:
-                pass
+                return JsonState.INVALID, depth
             case JsonState.START:
                 match char:
                     case "{":
-                        next_state = JsonState.EXPECT_KEY
-                        depth += 1
+                        return JsonState.EXPECT_KEY, depth + 1
                     case _:
-                        next_state = JsonState.INVALID
+                        return JsonState.INVALID, depth
             case JsonState.EXPECT_KEY:
                 match char:
                     case '"':
-                        next_state = JsonState.IN_KEY
+                        return JsonState.IN_KEY, depth
                     case char if char in WHITESPACE:
-                        next_state = JsonState.EXPECT_KEY
+                        return JsonState.EXPECT_KEY, depth
                     case _:
-                        next_state = JsonState.INVALID
+                        return JsonState.INVALID, depth
             case JsonState.IN_KEY:
                 match char:
                     case '"':
-                        next_state = JsonState.EXPECT_COLON
+                        return JsonState.EXPECT_COLON, depth
                     case _:
-                        next_state = JsonState.IN_KEY
+                        return JsonState.IN_KEY, depth
             case JsonState.IN_STRING:
                 match char:
                     case '"':
-                        next_state = JsonState.EXPECT_COMMA_OR_END
+                        return JsonState.EXPECT_COMMA_OR_END, depth
                     case _:
-                        next_state = JsonState.IN_STRING
+                        return JsonState.IN_STRING, depth
             case JsonState.NUMBER_AFTER_MINUS:
                 match char:
                     case "0":
-                        next_state = JsonState.IN_NUMBER_ZERO
+                        return JsonState.IN_NUMBER_ZERO, depth
                     case char if char in NON_ZERO_DIGITS:
-                        next_state = JsonState.IN_NUMBER
+                        return JsonState.IN_NUMBER, depth
                     case _:
-                        next_state = JsonState.INVALID
+                        return JsonState.INVALID, depth
             case JsonState.IN_NUMBER_ZERO:
-                match char:
-                    case ".":
-                        next_state = JsonState.NUMBER_AFTER_DOT
-                    case "e" | "E":
-                        next_state = JsonState.NUMBER_AFTER_EXP
-                    case char if char in WHITESPACE:
-                        next_state = JsonState.EXPECT_COMMA_OR_END
-                    case ",":
-                        next_state = JsonState.EXPECT_KEY
-                    case "}":
-                        depth -= 1
-                        if depth == 0:
-                            next_state = JsonState.END
-                        else:
-                            next_state = JsonState.EXPECT_COMMA_OR_END
-                    case _:
-                        next_state = JsonState.INVALID
+                return self._advance_number_state(
+                    json_state,
+                    char,
+                    depth,
+                    allow_digits=False,
+                    allow_fraction=True,
+                    allow_exponent=True,
+                )
             case JsonState.EXPECT_COLON:
                 match char:
                     case ":":
-                        next_state = JsonState.EXPECT_VALUE
+                        return JsonState.EXPECT_VALUE, depth
                     case char if char in WHITESPACE:
-                        next_state = JsonState.EXPECT_COLON
+                        return JsonState.EXPECT_COLON, depth
                     case _:
-                        next_state = JsonState.INVALID
+                        return JsonState.INVALID, depth
             case JsonState.EXPECT_VALUE:
                 match char:
                     case "{" if depth < MAX_DEPTH:
-                        next_state = JsonState.EXPECT_KEY
-                        depth += 1
+                        return JsonState.EXPECT_KEY, depth + 1
                     case '"':
-                        next_state = JsonState.IN_STRING
+                        return JsonState.IN_STRING, depth
                     case "-":
-                        next_state = JsonState.NUMBER_AFTER_MINUS
+                        return JsonState.NUMBER_AFTER_MINUS, depth
                     case "0":
-                        next_state = JsonState.IN_NUMBER_ZERO
+                        return JsonState.IN_NUMBER_ZERO, depth
                     case "t":
-                        next_state = JsonState.IN_TRUE_T
+                        return JsonState.IN_TRUE_T, depth
                     case "f":
-                        next_state = JsonState.IN_FALSE_F
+                        return JsonState.IN_FALSE_F, depth
                     case char if char in WHITESPACE:
-                        next_state = JsonState.EXPECT_VALUE
+                        return JsonState.EXPECT_VALUE, depth
                     case char if char in NON_ZERO_DIGITS:
-                        next_state = JsonState.IN_NUMBER
+                        return JsonState.IN_NUMBER, depth
                     case _:
-                        next_state = JsonState.INVALID
+                        return JsonState.INVALID, depth
             case JsonState.EXPECT_COMMA_OR_END:
                 match char:
                     case ",":
-                        next_state = JsonState.EXPECT_KEY
+                        return JsonState.EXPECT_KEY, depth
                     case "}":
-                        depth -= 1
-                        if depth == 0:
-                            next_state = JsonState.END
-                        else:
-                            next_state = JsonState.EXPECT_COMMA_OR_END
+                        return self._close_object(depth)
                     case char if char in WHITESPACE:
-                        next_state = JsonState.EXPECT_COMMA_OR_END
+                        return JsonState.EXPECT_COMMA_OR_END, depth
                     case _:
-                        next_state = JsonState.INVALID
+                        return JsonState.INVALID, depth
             case JsonState.IN_NUMBER:
-                match char:
-                    case char if char in DIGITS:
-                        next_state = JsonState.IN_NUMBER
-                    case ".":
-                        next_state = JsonState.NUMBER_AFTER_DOT
-                    case "e" | "E":
-                        next_state = JsonState.NUMBER_AFTER_EXP
-                    case char if char in WHITESPACE:
-                        next_state = JsonState.EXPECT_COMMA_OR_END
-                    case ",":
-                        next_state = JsonState.EXPECT_KEY
-                    case "}":
-                        depth -= 1
-                        if depth == 0:
-                            next_state = JsonState.END
-                        else:
-                            next_state = JsonState.EXPECT_COMMA_OR_END
-                    case _:
-                        next_state = JsonState.INVALID
+                return self._advance_number_state(
+                    json_state,
+                    char,
+                    depth,
+                    allow_digits=True,
+                    allow_fraction=True,
+                    allow_exponent=True,
+                )
             case JsonState.NUMBER_AFTER_DOT:
                 match char:
                     case char if char in DIGITS:
-                        next_state = JsonState.IN_FRACTION
+                        return JsonState.IN_FRACTION, depth
                     case _:
-                        next_state = JsonState.INVALID
+                        return JsonState.INVALID, depth
             case JsonState.IN_FRACTION:
-                match char:
-                    case char if char in DIGITS:
-                        next_state = JsonState.IN_FRACTION
-                    case "e" | "E":
-                        next_state = JsonState.NUMBER_AFTER_EXP
-                    case char if char in WHITESPACE:
-                        next_state = JsonState.EXPECT_COMMA_OR_END
-                    case ",":
-                        next_state = JsonState.EXPECT_KEY
-                    case "}":
-                        depth -= 1
-                        if depth == 0:
-                            next_state = JsonState.END
-                        else:
-                            next_state = JsonState.EXPECT_COMMA_OR_END
-                    case _:
-                        next_state = JsonState.INVALID
+                return self._advance_number_state(
+                    json_state,
+                    char,
+                    depth,
+                    allow_digits=True,
+                    allow_fraction=False,
+                    allow_exponent=True,
+                )
             case JsonState.NUMBER_AFTER_EXP:
                 match char:
                     case "+" | "-":
-                        next_state = JsonState.NUMBER_AFTER_EXP_SIGN
+                        return JsonState.NUMBER_AFTER_EXP_SIGN, depth
                     case char if char in DIGITS:
-                        next_state = JsonState.IN_EXPONENT
+                        return JsonState.IN_EXPONENT, depth
                     case _:
-                        next_state = JsonState.INVALID
+                        return JsonState.INVALID, depth
             case JsonState.NUMBER_AFTER_EXP_SIGN:
                 match char:
                     case char if char in DIGITS:
-                        next_state = JsonState.IN_EXPONENT
+                        return JsonState.IN_EXPONENT, depth
                     case _:
-                        next_state = JsonState.INVALID
+                        return JsonState.INVALID, depth
             case JsonState.IN_EXPONENT:
-                match char:
-                    case char if char in DIGITS:
-                        next_state = JsonState.IN_EXPONENT
-                    case char if char in WHITESPACE:
-                        next_state = JsonState.EXPECT_COMMA_OR_END
-                    case ",":
-                        next_state = JsonState.EXPECT_KEY
-                    case "}":
-                        depth -= 1
-                        if depth == 0:
-                            next_state = JsonState.END
-                        else:
-                            next_state = JsonState.EXPECT_COMMA_OR_END
-                    case _:
-                        next_state = JsonState.INVALID
-            case JsonState.IN_TRUE_T:
-                match char:
-                    case "r":
-                        next_state = JsonState.IN_TRUE_TR
-                    case _:
-                        next_state = JsonState.INVALID
-            case JsonState.IN_TRUE_TR:
-                match char:
-                    case "u":
-                        next_state = JsonState.IN_TRUE_TRU
-                    case _:
-                        next_state = JsonState.INVALID
-            case JsonState.IN_TRUE_TRU:
-                match char:
-                    case "e":
-                        next_state = JsonState.EXPECT_COMMA_OR_END
-                    case _:
-                        next_state = JsonState.INVALID
-            case JsonState.IN_FALSE_F:
-                match char:
-                    case "a":
-                        next_state = JsonState.IN_FALSE_FA
-                    case _:
-                        next_state = JsonState.INVALID
-            case JsonState.IN_FALSE_FA:
-                match char:
-                    case "l":
-                        next_state = JsonState.IN_FALSE_FAL
-                    case _:
-                        next_state = JsonState.INVALID
-            case JsonState.IN_FALSE_FAL:
-                match char:
-                    case "s":
-                        next_state = JsonState.IN_FALSE_FALS
-                    case _:
-                        next_state = JsonState.INVALID
-            case JsonState.IN_FALSE_FALS:
-                match char:
-                    case "e":
-                        next_state = JsonState.EXPECT_COMMA_OR_END
-                    case _:
-                        next_state = JsonState.INVALID
+                return self._advance_number_state(
+                    json_state,
+                    char,
+                    depth,
+                    allow_digits=True,
+                    allow_fraction=False,
+                    allow_exponent=False,
+                )
+            case state if state in LITERAL_TRANSITIONS:
+                return self._advance_literal_state(state, char, depth)
             case JsonState.END:
                 if char in WHITESPACE:
-                    next_state = JsonState.END
-                else:
-                    next_state = JsonState.INVALID
+                    return JsonState.END, depth
+                return JsonState.INVALID, depth
 
+        return JsonState.INVALID, depth
+
+    def _advance_number_state(
+        self,
+        json_state: JsonState,
+        char: str,
+        depth: int,
+        *,
+        allow_digits: bool,
+        allow_fraction: bool,
+        allow_exponent: bool,
+    ) -> tuple[JsonState, int]:
+        """Advance a numeric state with shared delimiter handling."""
+        if allow_digits and char in DIGITS:
+            return json_state, depth
+        if allow_fraction and char == ".":
+            return JsonState.NUMBER_AFTER_DOT, depth
+        if allow_exponent and char in {"e", "E"}:
+            return JsonState.NUMBER_AFTER_EXP, depth
+        return self._advance_completed_value(char, depth)
+
+    def _advance_completed_value(
+        self, char: str, depth: int
+    ) -> tuple[JsonState, int]:
+        """Advance after a complete literal or numeric token."""
+        if char in WHITESPACE:
+            return JsonState.EXPECT_COMMA_OR_END, depth
+        if char == ",":
+            return JsonState.EXPECT_KEY, depth
+        if char == "}":
+            return self._close_object(depth)
+        return JsonState.INVALID, depth
+
+    def _advance_literal_state(
+        self,
+        json_state: JsonState,
+        char: str,
+        depth: int,
+    ) -> tuple[JsonState, int]:
+        """Advance one step through the true/false literal FSM."""
+        expected_char, next_state = LITERAL_TRANSITIONS[json_state]
+        if char != expected_char:
+            return JsonState.INVALID, depth
         return next_state, depth
+
+    def _close_object(self, depth: int) -> tuple[JsonState, int]:
+        """Close the current object and move to the parent context."""
+        depth -= 1
+        if depth == 0:
+            return JsonState.END, depth
+        return JsonState.EXPECT_COMMA_OR_END, depth

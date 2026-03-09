@@ -57,6 +57,19 @@ class State:
     current_value_key: str | None = None
     current_value_buffer: str = ""
 
+    def copy(self) -> "State":
+        """Return a detached copy safe to mutate during simulation."""
+        return State(
+            s=self.s,
+            depth=self.depth,
+            allowed_keys=self.allowed_keys.copy(),
+            allowed_types=self.allowed_types.copy(),
+            keys=self.keys.copy(),
+            current_key=self.current_key,
+            current_value_key=self.current_value_key,
+            current_value_buffer=self.current_value_buffer,
+        )
+
     def remaining_keys(self, keys: list[str] | None = None) -> list[str]:
         """Return the keys that have not been emitted yet."""
         used_keys = self.keys if keys is None else keys

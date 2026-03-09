@@ -1,21 +1,7 @@
-from typing import Protocol, cast
+from typing import cast
 
+from .common import Tokenizer, build_token_mask, decode_vocab_tokens
 from src.vocabulary import Vocabulary
-
-
-class Tokenizer(Protocol):
-    """Protocol for objects that can decode token IDs to strings."""
-
-    def decode(self, ids: list[int]) -> str:
-        """Decode a sequence of token IDs into a string.
-
-        Args:
-            ids: List of integer token IDs.
-
-        Returns:
-            The decoded text string.
-        """
-        ...
 
 
 class ConstrainedStringDecoder:
@@ -26,7 +12,6 @@ class ConstrainedStringDecoder:
     zero logit mask; all others receive ``-inf``.
 
     Attributes:
-        model: Tokenizer used to decode individual token IDs.
         vocab: Vocabulary providing the full token list and its size.
         allowed_strings: Set of strings the decoder may produce.
         prefixes: All valid prefixes of every allowed string (including empty
@@ -54,7 +39,6 @@ class ConstrainedStringDecoder:
             raise ValueError(
                 "allowed_strings must contain at least one value.")
 
-        self.model: Tokenizer = tokenizer
         self.vocab: Vocabulary = vocab
         self.allowed_strings: set[str] = set(allowed_strings)
         self.prefixes: set[str] = {
@@ -62,8 +46,7 @@ class ConstrainedStringDecoder:
             for allowed in self.allowed_strings
             for index in range(len(allowed) + 1)
         }
-        self.token_bytes: list[str] = [
-            tokenizer.decode([i]) for i in range(vocab.size)]
+        self.token_bytes: list[str] = decode_vocab_tokens(tokenizer, vocab)
 
     def get_logit_mask(self, value: str) -> list[float]:
         """Compute the additive logit mask for the current generation prefix.
@@ -78,8 +61,10 @@ class ConstrainedStringDecoder:
             A list of float offsets of length ``vocab.size`` to add to raw
             logits before greedy selection.
         """
-        mask = [-float("inf")] * self.vocab.size
-        for token_id, token_str in enumerate(self.token_bytes):
-            if value + token_str in self.prefixes:
-                mask[token_id] = 0.0
-        return cast(list[float], mask)
+        return cast(
+            list[float],
+            build_token_mask(
+                self.token_bytes,
+                lambda token_str: value + token_str in self.prefixes,
+            ),
+        )
