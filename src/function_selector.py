@@ -4,7 +4,7 @@ from src.models.function_definition import (
     FunctionDefinition,
     FunctionDefinitions,
 )
-from src.constrained_string_decoder import ConstrainedStringDecoder
+from src.decoding import ConstrainedStringDecoder
 from src.vocabulary import Vocabulary
 from src.llm_sdk import Small_LLM_Model
 

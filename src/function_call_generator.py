@@ -3,7 +3,7 @@ from typing import cast
 from src.models.function_definition import FunctionDefinition
 from src.models.function_call import FunctionCall
 from src.function_selector import FunctionSelector
-from src.constrained_decoder import ConstrainedJSONDecoder, JsonState, State
+from src.decoding import ConstrainedJSONDecoder, JsonState, State
 from src.vocabulary import Vocabulary
 from src.llm_sdk import Small_LLM_Model
 
@@ -88,7 +88,7 @@ class FunctionCallGenerator:
         """Run constrained greedy decoding to complete the JSON string.
 
         Continues token-by-token generation from *result* until the JSON FSM
-        reaches :attr:`~src.state.JsonState.END` or the iteration limit is hit.
+        reaches :attr:`~src.decoding.JsonState.END` or the token limit is hit.
 
         Args:
             prompt: Full LLM prompt (used as context for logit generation).

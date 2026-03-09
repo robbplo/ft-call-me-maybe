@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from src.state import State, JsonState
+from .state import State, JsonState
 from src.vocabulary import Vocabulary
 
 
