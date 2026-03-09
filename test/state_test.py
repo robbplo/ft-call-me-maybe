@@ -52,7 +52,7 @@ def test_add_key_char(
                   allowed_keys=["aaa", "bbb", "cc"])
 
     for char, expected_allowed, expected_keys, expected_current_key in steps:
-        allowed, keys, current_key = state.add_key_char(char)
+        allowed, keys, current_key, _ = state.add_key_char(char)
 
         assert (allowed, keys, current_key) == (
             expected_allowed,
@@ -62,3 +62,20 @@ def test_add_key_char(
 
         state.keys = keys
         state.current_key = current_key
+
+
+def test_add_key_char_sets_current_value_key_when_key_closes() -> None:
+    state = State(
+        JsonState.IN_KEY,
+        depth=2,
+        allowed_keys=["aaa"],
+        allowed_types={"aaa": "int"},
+        current_key="aaa",
+    )
+
+    allowed, keys, current_key, current_value_key = state.add_key_char('"')
+
+    assert allowed is True
+    assert keys == ["aaa"]
+    assert current_key == ""
+    assert current_value_key == "aaa"

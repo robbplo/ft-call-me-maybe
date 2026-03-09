@@ -101,7 +101,8 @@ class FunctionCallGenerator:
         state = State(
             JsonState.START, depth=0,
             allowed_keys=function.args_names,
-            keys=[""], current_key="",
+            allowed_types=function.args_types,
+            keys=[], current_key="",
         )
         next_s, next_depth = self.decoder._simulate_structure(
             state.s, result, state.depth)
@@ -118,10 +119,18 @@ class FunctionCallGenerator:
             token = self.model.decode([max_index])
             result += token
 
-            _, keys, current_key = self.decoder._simulate_schema(
+            (
+                _,
+                keys,
+                current_key,
+                current_value_key,
+                current_value_buffer,
+            ) = self.decoder._simulate_schema(
                 state, token, prints=True)
             state.keys = keys
             state.current_key = current_key
+            state.current_value_key = current_value_key
+            state.current_value_buffer = current_value_buffer
 
             next_s, next_depth = self.decoder._simulate_structure(
                 state.s, token, state.depth)
