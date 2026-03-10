@@ -106,7 +106,9 @@ class FunctionCallGenerator:
         )
         allowed, state = self.decoder.advance_state(state, result)
         if not allowed:
-            raise ValueError("Initial JSON prefix violates decoder constraints.")
+            raise ValueError(
+                "Initial JSON prefix violates decoder constraints."
+            )
 
         for _ in range(100):
             ids = self.model.encode(prompt + result)

@@ -1,5 +1,4 @@
 from .common import (
-    MASK_ALLOWED,
     MASK_BLOCKED,
     Tokenizer,
     build_token_mask,
@@ -78,10 +77,16 @@ class ConstrainedJSONDecoder:
         """
         structural_mask = self.structural_masks[state.s, state.depth]
         masked = [a + b for a, b in zip(logits, structural_mask)]
-        for idx in sorted(range(len(masked)), key=lambda i: masked[i], reverse=True):
+        ordered = sorted(
+            range(len(masked)),
+            key=lambda i: masked[i], reverse=True
+        )
+        for idx in ordered:
             if masked[idx] == MASK_BLOCKED:
                 break
-            valid, next_state = self.advance_state(state, self.token_bytes[idx])
+            valid, next_state = self.advance_state(
+                state, self.token_bytes[idx]
+            )
             if valid:
                 return idx, next_state
         raise ValueError("No valid token found — state machine is stuck.")
@@ -236,7 +241,7 @@ class ConstrainedJSONDecoder:
     def _get_structural_mask(
         self, json_state: JsonState, depth: int
     ) -> list[float]:
-        """Pre-compute the structural logit mask for a given state and depth."""
+        """Compute the structural logit mask for a given state and depth."""
         return build_token_mask(
             self.token_bytes,
             lambda token_str: self._simulate_structure(
@@ -250,7 +255,7 @@ class ConstrainedJSONDecoder:
     def _simulate_structure(
         self, json_state: JsonState, token: str, depth: int
     ) -> tuple[JsonState, int]:
-        """Simulate appending *token* character by character through the FSM."""
+        """Simulate appending character by character through the FSM."""
         for char in token:
             json_state, depth = self._simulate_structure_char(
                 json_state, char, depth)
