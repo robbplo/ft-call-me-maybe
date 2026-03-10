@@ -112,15 +112,9 @@ class FunctionCallGenerator:
             ids = self.model.encode(prompt + result)
             logits = self.model.get_logits_from_input_ids(ids.tolist()[0])
 
-            mask = self.decoder.get_logit_mask(state)
-            masked_logits = [a + b for a, b in zip(logits, mask)]
-            max_index = masked_logits.index(max(masked_logits))
-
+            max_index, state = self.decoder.find_valid_token(logits, state)
             token = self.model.decode([max_index])
             result += token
-
-            allowed, state = self.decoder.advance_state(state, token)
-            assert allowed
 
             print(token, end="", flush=True)
 

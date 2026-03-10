@@ -1,5 +1,6 @@
 from .common import (
     MASK_ALLOWED,
+    MASK_BLOCKED,
     Tokenizer,
     build_token_mask,
     decode_vocab_tokens,
@@ -62,20 +63,28 @@ class ConstrainedJSONDecoder:
         }
 
     def get_logit_mask(self, state: State) -> list[float]:
-        """Return the combined structural and schema logit mask."""
+        """Return the structural logit mask for the current state."""
+        return self.structural_masks[state.s, state.depth]
+
+    def find_valid_token(
+        self, logits: list[float], state: State
+    ) -> tuple[int, State]:
+        """Return the highest-logit structurally- and schema-valid token.
+
+        Applies the structural mask, then walks tokens in descending logit
+        order and returns the first one that also passes the schema check.
+        For greedy decoding this is equivalent to the old full-mask approach
+        but avoids calling advance_state for every vocabulary token.
+        """
         structural_mask = self.structural_masks[state.s, state.depth]
-        schema_mask = self._get_schema_mask(state)
-        return [a + b for a, b in zip(structural_mask, schema_mask)]
-
-    def _get_schema_mask(self, state: State) -> list[float]:
-        """Compute the schema-level logit mask for depth-2 args decoding."""
-        if state.depth != 2:
-            return [MASK_ALLOWED] * self.vocab.size
-
-        return build_token_mask(
-            self.token_bytes,
-            lambda token_str: self.advance_state(state, token_str)[0],
-        )
+        masked = [a + b for a, b in zip(logits, structural_mask)]
+        for idx in sorted(range(len(masked)), key=lambda i: masked[i], reverse=True):
+            if masked[idx] == MASK_BLOCKED:
+                break
+            valid, next_state = self.advance_state(state, self.token_bytes[idx])
+            if valid:
+                return idx, next_state
+        raise ValueError("No valid token found — state machine is stuck.")
 
     def advance_state(self, state: State, text: str) -> tuple[bool, State]:
         """Return whether *text* is valid and the resulting copied state."""

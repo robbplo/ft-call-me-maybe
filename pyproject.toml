@@ -14,6 +14,8 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "flameprof>=0.4",
+    "pyinstrument>=5.0",
     "pytest>=9.0.2",
 ]
 
