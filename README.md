@@ -231,7 +231,7 @@ This means the project has two safety nets:
 
 ## Performance Analysis
 
-On the target hardware used for evaluation, a complete run takes about **3 minutes 30 seconds**.
+On the target hardware used for evaluation, a complete run takes about **2 minutes 20 seconds**.
 
 For the bundled sample set in `data/input/function_calling_tests.json`, the program generates a
 valid JSON array with 14 results. The strongest part of the system is structural reliability: the
@@ -273,41 +273,8 @@ The repository is currently tested in four layers:
 
 The most useful checks during development were the decoder-level tests in `test/`, because they make
 it easy to verify that invalid prefixes, invalid keys, type-mismatched values, and early object
-termination are rejected before the model can choose them.
-
-Run the unit suite with:
-
-```bash
-uv run pytest -q test
-```
-
-## Example Usage
-
-### Default run
-
-```bash
-uv run python -m src
-```
-
-### Custom output path
-
-```bash
-uv run python -m src \
-  --input data/input/function_calling_tests.json \
-  --output /tmp/function_calling_results.json
-```
-
-### Example result
-
-```json
-{
-  "prompt": "Greet john",
-  "fn_name": "fn_greet",
-  "args": {
-    "name": "john"
-  }
-}
-```
+termination are rejected before the model can choose them. The tests were not submitted, since the
+subject did not allow this.
 
 ## Resources
 
